@@ -1,0 +1,1131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Supersports Complaint Radar</title>
+<meta name="description" content="Customer complaint monitoring for the Supersports Virtual AI assistant, read live from a Google Sheet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room board. Data source, time frame filter, complaint watch, what to fix, then the time frame analysis; one column on phones. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#131820; --muted:#566070; --faint:#8b94a3; --line:#e1e5eb; --grid:#edf0f4;
+  --accent:#2a78d6; --accent-soft:#dbe8f8; --hot:#d2403a; --hot-soft:#fbe4e2; --warn:#b77400; --warn-soft:#fbefd6; --good:#1a7f4b; --good-soft:#dff3e8;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#b7bdc7;
+  --f-display:"Familjen Grotesk","IBM Plex Sans Thai",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1116; --surface:#161b22; --ink:#eef1f5; --muted:#a3acba; --faint:#77808e; --line:#29303a; --grid:#20262f;
+  --accent:#3987e5; --accent-soft:#1b2c44; --hot:#e66767; --hot-soft:#3a1d1f; --warn:#e0a32e; --warn-soft:#3a2d12; --good:#4cc38a; --good-soft:#13301f;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#59616d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1116; --surface:#161b22; --ink:#eef1f5; --muted:#a3acba; --faint:#77808e; --line:#29303a; --grid:#20262f;
+  --accent:#3987e5; --accent-soft:#1b2c44; --hot:#e66767; --hot-soft:#3a1d1f; --warn:#e0a32e; --warn-soft:#3a2d12; --good:#4cc38a; --good-soft:#13301f;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#59616d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:grid;gap:22px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(1.7rem,3.4vw,2.4rem);font-weight:700;line-height:1.1}
+h2{font-size:1.2rem;font-weight:600}
+h3{font-size:.98rem;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+header{display:grid;gap:10px}
+.sub{color:var(--muted);max-width:72ch}
+.meta{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--f-mono);font-size:.74rem;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:grid;gap:14px;min-width:0}
+.panel-head{display:grid;gap:4px}
+.panel-head p{color:var(--muted);font-size:.9rem;max-width:80ch}
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:4px;align-content:start}
+.kpi .v{font-family:var(--f-display);font-size:2rem;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:.86rem;font-weight:500}
+.kpi .d{font-size:.8rem;color:var(--muted)}
+.kpi.hot .v{color:var(--hot)}
+@media (max-width:980px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:620px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* headline findings */
+.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.finding{display:grid;gap:6px;padding:16px;border-radius:10px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--sev,var(--accent))}
+.finding p{font-size:.9rem;color:var(--muted)}
+.finding strong{color:var(--ink)}
+.sev{font-family:var(--f-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sev)}
+@media (max-width:860px){.findings{grid-template-columns:1fr}}
+/* scenario table */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:640px}
+th{font-family:var(--f-mono);font-size:.7rem;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--grid);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+.barcell{display:flex;align-items:center;gap:10px;min-width:200px}
+.bar{height:12px;border-radius:0 4px 4px 0;background:var(--accent)}
+.barcell span{font-family:var(--f-mono);font-size:.82rem;min-width:44px}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:.76rem;padding:1px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
+.pill.hi{background:var(--hot-soft);color:var(--hot)}
+.pill.md{background:var(--warn-soft);color:var(--warn)}
+.pill.lo{background:var(--grid);color:var(--muted)}
+.scn{font-weight:500}
+.scn small{display:block;color:var(--faint);font-size:.76rem;font-weight:400}
+/* grids */
+.two{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:22px}
+.two.even{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:900px){.two,.two.even{grid-template-columns:1fr}}
+/* charts */
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{fill:var(--muted);font-family:var(--f-mono);font-size:10.5px}
+.chart .gl{stroke:var(--grid);stroke-width:1}
+.chart .ax{stroke:var(--line);stroke-width:1}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.78rem;padding:7px 10px;border-radius:6px;line-height:1.4;white-space:nowrap;transform:translate(-50%,-100%);opacity:0;transition:opacity .12s;z-index:5}
+.tip b{font-family:var(--f-mono);font-weight:500}
+.chart.wide{overflow-x:auto}
+.chart.wide svg{min-width:640px}
+td.scn{min-width:210px}
+.note{font-size:.78rem;color:var(--faint)}
+/* bot handling */
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stat{padding:12px 14px;border-radius:8px;background:var(--bg);display:grid;gap:2px}
+.stat .v{font-family:var(--f-display);font-size:1.45rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .l{font-size:.82rem;color:var(--muted)}
+@media (max-width:420px){.stats{grid-template-columns:1fr}}
+.cmp{display:grid;gap:8px}
+.cmp-row{display:grid;grid-template-columns:120px 1fr 44px;align-items:center;gap:10px;font-size:.85rem}
+.cmp-row .track{height:14px;background:var(--grid);border-radius:0 4px 4px 0}
+.cmp-row .fill{height:100%;border-radius:0 4px 4px 0}
+.cmp-row b{font-family:var(--f-mono);font-weight:500;text-align:right}
+/* quotes */
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.filters button{font:inherit;font-size:.8rem;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.filters button:hover{border-color:var(--accent);color:var(--ink)}
+.filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.filters button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.quotes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.quote{border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:8px;align-content:start;background:var(--surface)}
+.quote .th{font-size:.95rem}
+.quote .en{font-size:.84rem;color:var(--muted)}
+.quote .tag{font-family:var(--f-mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
+.quote.threat .tag{color:var(--hot)}
+/* actions */
+.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;counter-reset:a}
+.action{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:14px;border-radius:8px;background:var(--bg)}
+.action::before{counter-increment:a;content:counter(a);font-family:var(--f-mono);font-size:.8rem;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center}
+.action p{font-size:.88rem;color:var(--muted)}
+.action h3{margin-bottom:3px}
+@media (max-width:760px){.actions{grid-template-columns:1fr}}
+details{font-size:.86rem;color:var(--muted)}
+details summary{cursor:pointer;color:var(--ink);font-weight:500}
+details ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- daily watch ---- */
+.watchpanel{border-top:3px solid var(--wstate,var(--accent))}
+.watch-head{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between}
+.daybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.daybar button,.btn{font:inherit;font-size:.84rem;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.daybar button:hover,.btn:hover{border-color:var(--accent)}
+.daybar button:disabled{opacity:.4;cursor:default}
+.daybar input[type=date]{font:inherit;font-size:.84rem;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.daybar button:focus-visible,.btn:focus-visible,.daybar input:focus-visible,.ddbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.banner{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:12px 14px;border-radius:8px;background:var(--bstate-soft,var(--grid))}
+.banner b{font-family:var(--f-display);font-size:1.15rem;color:var(--bstate,var(--ink))}
+.banner span{font-size:.88rem;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.tile{padding:12px 14px;border-radius:8px;background:var(--bg);display:grid;gap:2px;align-content:start}
+.tile .v{font-family:var(--f-display);font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile .l{font-size:.8rem;font-weight:500}
+.tile .d{font-size:.76rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.tile .d.up{color:var(--hot)} .tile .d.down{color:var(--good)}
+@media (max-width:900px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.st{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:.72rem;padding:2px 8px;border-radius:999px;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+.st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st.alert{background:var(--hot-soft);color:var(--hot)}
+.st.watch{background:var(--warn-soft);color:var(--warn)}
+.st.ok{background:var(--good-soft);color:var(--good)}
+.alerts td{vertical-align:top}
+.alerts .act{font-size:.8rem;color:var(--muted);min-width:260px;max-width:52ch}
+.alerts .act b{color:var(--ink);font-weight:500}
+.alerts tr.is-ok .act{color:var(--faint)}
+.spark{display:block}
+.queue{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))}
+.qi{display:grid;gap:4px;padding:10px 12px;border-radius:8px;background:var(--bg);border-left:3px solid var(--qc,var(--line))}
+.qi .meta2{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-family:var(--f-mono);font-size:.72rem;color:var(--muted)}
+.qi p{font-size:.9rem}
+.tag{font-family:var(--f-mono);font-size:.68rem;padding:1px 6px;border-radius:4px;background:var(--grid);color:var(--muted)}
+.tag.threat{background:var(--hot-soft);color:var(--hot)}
+.tag.angry{background:var(--warn-soft);color:var(--warn)}
+.empty{padding:16px;border-radius:8px;background:var(--bg);color:var(--muted);font-size:.88rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chips button{font:inherit;font-family:var(--f-mono);font-size:.74rem;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.chips button.alert{border-color:var(--hot);color:var(--hot)}
+.chips button:hover{background:var(--grid)}
+.upload{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:12px 14px;border-radius:8px;border:1px dashed var(--line)}
+.upload p{font-size:.82rem;color:var(--muted);flex:1 1 280px}
+.upload input{position:absolute;width:1px;height:1px;opacity:0}
+#up-msg{font-size:.82rem}
+#up-msg.ok{color:var(--good)} #up-msg.err{color:var(--hot)}
+.watch-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px}
+@media (max-width:960px){.watch-grid{grid-template-columns:1fr}}
+.subh{font-family:var(--f-display);font-size:.98rem;font-weight:600;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.subh small{font-family:var(--f-body);font-weight:400;font-size:.78rem;color:var(--muted)}
+/* ---- fix first ---- */
+.fix-top{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px}
+@media (max-width:860px){.fix-top{grid-template-columns:1fr}}
+.first{padding:18px;border-radius:10px;background:var(--hot-soft);display:grid;gap:8px;align-content:start}
+.first .rank{font-family:var(--f-mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--hot)}
+.first h3{font-size:1.35rem}
+.first p{font-size:.9rem}
+.first ul{margin:0;padding-left:18px;font-size:.88rem;display:grid;gap:3px}
+.next{display:grid;gap:10px;align-content:start}
+.nx{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:12px 14px;border-radius:8px;background:var(--bg)}
+.nx .n{font-family:var(--f-mono);font-size:.8rem;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--hot-soft);color:var(--hot)}
+.nx p{font-size:.84rem;color:var(--muted)}
+.tiers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:900px){.tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.tiers{grid-template-columns:1fr}}
+.tier{border-radius:8px;border:1px solid var(--line);padding:12px;display:grid;gap:8px;align-content:start;border-top:3px solid var(--tc)}
+.tier h3{font-size:.9rem;color:var(--tc)}
+.tier ol{margin:0;padding-left:0;list-style:none;display:grid;gap:6px;font-size:.84rem}
+.tier li{display:flex;justify-content:space-between;gap:8px}
+.tier li span:last-child{font-family:var(--f-mono);font-size:.76rem;color:var(--muted);white-space:nowrap}
+.quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:900px){.quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.quick{grid-template-columns:1fr}}
+.qw{padding:12px;border-radius:8px;background:var(--accent-soft);display:grid;gap:4px;align-content:start}
+.qw b{font-size:.88rem}
+.qw span{font-size:.8rem;color:var(--muted)}
+/* ---- scenario deep dive ---- */
+.ddbtn{font:inherit;font-size:.78rem;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--accent);cursor:pointer;white-space:nowrap}
+.ddbtn[aria-expanded="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+tr.dd td{background:var(--bg);padding:16px}
+tr.dd[hidden]{display:none}
+.ddwrap{display:grid;gap:12px}
+.ddsum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:860px){.ddsum{grid-template-columns:1fr}}
+.ddsum div{padding:10px 12px;border-radius:8px;background:var(--surface);display:grid;gap:3px;font-size:.86rem}
+.ddsum .k{font-family:var(--f-mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.cause{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:14px;padding:10px 12px;border-radius:8px;background:var(--surface)}
+@media (max-width:760px){.cause{grid-template-columns:1fr}}
+.cause .says{display:grid;gap:3px}
+.cause .says .th{font-size:.9rem}
+.cause .says .en{font-size:.8rem;color:var(--muted)}
+.cause .real{display:grid;gap:6px;align-content:start}
+.cause .real b{font-size:.88rem;font-weight:500}
+.sh{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:.76rem;color:var(--muted)}
+.sh i{display:block;height:8px;border-radius:0 3px 3px 0;background:var(--accent)}
+.lbl{font-family:var(--f-mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+.tierpill{font-family:var(--f-mono);font-size:.7rem;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.tierpill.Critical{background:var(--hot-soft);color:var(--hot)}
+.tierpill.High{background:var(--warn-soft);color:var(--warn)}
+.tierpill.Medium{background:var(--accent-soft);color:var(--accent)}
+.tierpill.Acceptable{background:var(--grid);color:var(--muted)}
+.section-title{display:grid;gap:4px;margin-top:6px}
+.section-title p{color:var(--muted);font-size:.9rem}
+/* ---- time frame filter ---- */
+.filterbar{background:var(--surface);border-bottom:1px solid var(--line);z-index:20}
+@media (min-width:700px){.filterbar{position:sticky;top:env(safe-area-inset-top,0px)}}
+.fb-in{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:10px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:space-between}
+.fb-label{display:grid;gap:1px;min-width:0}
+.fb-label b{font-family:var(--f-display);font-size:1rem;font-weight:600}
+.fb-ctl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.fb-date{display:flex;gap:6px;align-items:center;font-size:.8rem;color:var(--muted)}
+.fb-date input{font:inherit;font-size:.84rem;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.fb-presets{display:flex;flex-wrap:wrap;gap:6px}
+.fb-presets button{font:inherit;font-size:.78rem;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.fb-presets button:hover{border-color:var(--accent);color:var(--ink)}
+.fb-presets button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.fb-presets button:focus-visible,.fb-date input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- standalone page base + data source panel ---- */
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+[hidden]{display:none!important}
+#dash{display:grid;gap:22px}
+.srcpanel{display:grid;gap:10px;padding:14px 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.src-row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.src-info{display:grid;gap:2px;min-width:0}
+.src-info b{font-family:var(--f-display);font-size:1rem;font-weight:600}
+.src-actions{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.src-actions input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
+.src-mode{display:flex;gap:10px;font-size:.8rem;color:var(--muted)}
+.src-mode label{display:flex;gap:4px;align-items:center;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:default}
+.src-status{margin:0;font-size:.84rem;padding:8px 12px;border-radius:8px;background:var(--grid);color:var(--muted)}
+.src-status.busy{background:var(--accent-soft);color:var(--accent)}
+.src-status.ok{background:var(--good-soft);color:var(--good)}
+.src-status.err{background:var(--hot-soft);color:var(--hot)}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div class="filterbar" id="filterbar" hidden>
+  <div class="fb-in">
+    <div class="fb-label"><span class="eyebrow">Time frame</span><b id="fb-sum"></b></div>
+    <div class="fb-ctl" role="group" aria-label="Choose a time frame">
+      <label class="fb-date">From <input type="date" id="f-from"></label>
+      <label class="fb-date">To <input type="date" id="f-to"></label>
+      <div class="fb-presets" id="f-presets">
+        <button type="button" data-p="7">Last 7 days</button>
+        <button type="button" data-p="14">Last 14 days</button>
+        <button type="button" data-p="30">Last 30 days</button>
+        <button type="button" data-p="90">Last 90 days</button>
+        <button type="button" data-p="all">All</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Virtual AI assistant · chat log analysis</span>
+    <h1>Where customers are unhappy</h1>
+    <p class="sub">Every customer message sent to the Supersports AI assistant, tagged for complaint scenarios. Data comes straight from the Google Sheet. Choose a time frame and every number on the page follows it.</p>
+    <div class="meta">
+      <span class="chip" id="m-range"></span>
+      <span class="chip" id="m-msgs"></span>
+      <span class="chip" id="m-sess"></span>
+    </div>
+  </header>
+
+  <section class="srcpanel" aria-label="Data source">
+    <div class="src-row">
+      <div class="src-info"><span class="eyebrow">Data source</span><b id="src-label">Google Sheet</b><span class="note" id="src-meta">Waiting for data…</span></div>
+      <div class="src-actions">
+        <button type="button" class="btn primary" id="btn-refresh">Refresh data</button>
+        <label class="btn" for="up-file">Load a file instead</label>
+        <input type="file" id="up-file" accept=".csv,.xlsx,.xls">
+        <span class="src-mode" role="radiogroup" aria-label="When loading a file">
+          <label><input type="radio" name="up-mode" value="replace" checked> Replace current data</label>
+          <label><input type="radio" name="up-mode" value="add"> Add to current data</label>
+        </span>
+      </div>
+    </div>
+    <p class="src-status busy" id="src-status">Loading data from the Google Sheet…</p>
+  </section>
+
+  <div id="dash" hidden>
+
+  <!-- 1. DAILY WATCH -->
+  <section class="panel watchpanel" id="watch" aria-labelledby="w-title">
+    <div class="panel-head">
+      <span class="eyebrow">Complaint watch · act in time</span>
+      <h2 id="w-title">Complaints in this time frame: <span id="w-date"></span></h2>
+      <p id="w-sub"></p>
+    </div>
+
+    <div class="banner" id="w-banner"></div>
+    <div class="tiles" id="w-tiles"></div>
+
+    <div style="display:grid;gap:10px;min-width:0">
+      <div class="subh">Alert board <small>this time frame vs the previous period of the same length</small></div>
+      <div class="tbl-wrap"><table class="alerts" id="w-alerts" style="min-width:620px">
+        <thead><tr><th>Status</th><th>Scenario</th><th class="r">This time frame</th><th class="r">Previous period</th><th class="r">Spike days</th><th>Daily trend</th><th>Who acts and what to do</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+
+    <div style="display:grid;gap:10px;align-content:start;min-width:0">
+      <div class="subh">Follow up <small id="q-count"></small></div>
+      <div class="queue" id="w-queue"></div>
+      <div><button type="button" class="btn" id="q-more" hidden></button></div>
+      <p class="note">Ranked by risk: threats to escalate, no reply from staff, money at stake and angry wording. Session ID is the first 8 characters. Emails and phone numbers are hidden.</p>
+    </div>
+
+    <div style="display:grid;gap:8px">
+      <div class="subh"><span id="strip-title">Complaints per day</span> <small>click a bar to look at one day</small></div>
+      <div class="chart wide" id="w-strip"></div>
+      <div class="legend"><span><i style="background:var(--hot)"></i>Spike day</span><span><i style="background:var(--warn)"></i>Watch</span><span><i style="background:var(--s5)"></i>Normal</span></div>
+      <div class="chips" id="w-recent"></div>
+    </div>
+
+    <p class="note">Alert: the scenario is at least 1.5 times the previous period and 8 or more messages higher, or it had spike days on at least 1 in 10 days of the time frame (any spike day when the time frame is 7 days or less). Watch: at least 1.2 times and 4 or more higher, or any spike day. A spike day is at least 1.5 times the 7-day average and 8 or more messages above it. Escalation threats: watch at 1 or more, alert when they jump by 3 or more.</p>
+  </section>
+
+  <!-- 2. FIX FIRST -->
+  <section class="panel" aria-labelledby="f-title">
+    <div class="panel-head">
+      <span class="eyebrow">Priority summary</span>
+      <h2 id="f-title">What to fix first</h2>
+      <p>The order is set from the full six-month analysis: message volume, money at stake, angry wording, and how often the bot had to send the customer to the call center. Counts show the selected time frame.</p>
+    </div>
+    <div class="fix-top">
+      <article class="first">
+        <span class="rank">Fix first · Critical</span>
+        <h3>Orders stuck before dispatch</h3>
+        <p id="ff-lead"></p>
+        <ul>
+          <li>Set a dispatch target (for example 48 hours) with a daily backlog report.</li>
+          <li>Add pick-and-pack staff before every campaign.</li>
+          <li>Auto-send an SMS or LINE update with a new date when an order misses the target.</li>
+        </ul>
+        <p>Fixing this also cuts "where is my order" questions, calls to staff and bot frustration.</p>
+      </article>
+      <div class="next" id="ff-next"></div>
+    </div>
+    <div class="tiers" id="ff-tiers"></div>
+    <p class="note" id="ff-note"></p>
+    <div style="display:grid;gap:8px">
+      <div class="subh">Quick wins to start this week <small>communication and content changes, no system build</small></div>
+      <div class="quick">
+        <div class="qw"><b>Tell customers about split parcels</b><span>At checkout and in the shipping email.</span></div>
+        <div class="qw"><b>Rewrite the cancellation notice</b><span>Name the item, the reason and the refund date.</span></div>
+        <div class="qw"><b>Fill the FAQ gaps</b><span>Store cancellations, refund status, OTP, delivered but not received.</span></div>
+        <div class="qw"><b>Show why a promo code fails</b><span>Minimum spend, excluded brand, first order only, expired.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. PERIOD PICTURE -->
+  <div class="section-title">
+    <span class="eyebrow">Time frame analysis</span>
+    <h2 id="g-title"></h2>
+  </div>
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi hot"><span class="v" id="k-rate"></span><span class="l">of messages are complaints</span><span class="d" id="k-rate-d"></span></div>
+    <div class="kpi hot"><span class="v" id="k-sess"></span><span class="l">of chats contain a complaint</span><span class="d" id="k-sess-d"></span></div>
+    <div class="kpi"><span class="v" id="k-neg"></span><span class="l">angry or upset messages</span><span class="d">Strong negative words, "why still…", "!!!"</span></div>
+    <div class="kpi"><span class="v" id="k-human"></span><span class="l">asked for a human</span><span class="d">"ติดต่อเจ้าหน้าที่", live agent, call center</span></div>
+    <div class="kpi"><span class="v" id="k-threat"></span><span class="l">threats to escalate or leave</span><span class="d">Consumer board, legal, social media, buy elsewhere</span></div>
+  </section>
+
+  <section class="findings" aria-label="Key findings" id="findings"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">What customers complain about</span>
+      <h2>Complaint scenarios, ranked by volume</h2>
+      <p>Open <b>Deep dive</b> on any row to see what customers write next to what is really going on. <b>Angry tone</b> is the share of that scenario's messages with strong negative wording. <b>Sent to call center</b> is how often the bot could not close the issue and pointed the customer to a phone number, form or staff.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn" id="dd-all">Open all deep dives</button></div>
+    <div class="tbl-wrap"><table id="tbl">
+      <thead><tr><th>Scenario</th><th>Messages</th><th class="r">Chats</th><th class="r">Angry tone</th><th class="r">Sent to call center</th><th>Priority</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="note" id="tbl-note"></p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">When it happens</span>
+      <h2 id="trend-title">Complaints over time, and their share of all messages</h2>
+      <p id="trend-desc"></p>
+    </div>
+    <div class="chart wide" id="c-weekly"></div>
+    <div class="chart wide" id="c-rate"></div>
+    <p class="note" id="trend-note"></p>
+  </section>
+
+  <div class="two">
+    <section class="panel">
+      <div class="panel-head">
+        <span class="eyebrow">Mix over time</span>
+        <h2 id="mix-title">Which problems drive each period</h2>
+        <p id="mix-desc"></p>
+      </div>
+      <div class="legend" id="l-month"></div>
+      <div class="chart" id="c-month"></div>
+      <p class="note" id="mix-note"></p>
+    </section>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="eyebrow">Time of day</span>
+        <h2>Complaints by hour (Bangkok time)</h2>
+        <p id="hour-desc"></p>
+      </div>
+      <div class="chart" id="c-hour"></div>
+    </section>
+  </div>
+
+  <div class="two even">
+    <section class="panel">
+      <div class="panel-head">
+        <span class="eyebrow">How the bot coped</span>
+        <h2>Complaint chats run long and often end in a handoff</h2>
+      </div>
+      <div class="cmp" id="cmp"></div>
+      <div class="stats" id="botstats"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="eyebrow">Friction requests</span>
+        <h2>Requests that signal a let-down</h2>
+        <p>Not always a complaint, but each one means the purchase did not go as hoped. Counted separately from the scenarios above.</p>
+      </div>
+      <div class="cmp" id="soft"></div>
+      <p class="note" id="soft-note"></p>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Voice of the customer</span>
+      <h2>What customers actually wrote</h2>
+      <p id="voice-desc">Real messages from the time frame. Order numbers and personal details removed.</p>
+    </div>
+    <div class="filters" id="qf" role="group" aria-label="Filter quotes by scenario"></div>
+    <div class="quotes" id="quotes"></div>
+  </section>
+
+  <details class="panel">
+    <summary>How this was measured</summary>
+    <ul>
+      <li>Source: <span id="src"></span> customer messages from the Virtual AI assistant log (Thai and English), read from the published Google Sheet each time the page opens, or from a file loaded on the page. The page keeps a saved copy in your browser so it opens quickly.</li>
+      <li>Each message was tagged with Thai and English keyword rules per scenario (for example "ยังไม่ได้รับ", "ไม่ครบ", "ถูกยกเลิก", "ยังไม่ได้เงินคืน", "โค้ดใช้ไม่ได้", "otp", "โทรไม่ติด", "not received", "refund"). Rules were spot-checked against random samples and tuned to remove common false matches, such as customers who ordered the wrong size themselves.</li>
+      <li>A "complaint" message matches at least one scenario or uses strong negative wording. Cancel, return/exchange and "talk to a human" requests are shown separately as friction requests.</li>
+      <li>A "chat" is one Session ID, counted on the day it started. "Sent to call center" means the bot's reply contained a phone number, form link, email address or a referral to staff.</li>
+      <li>Deep-dive causes use the customer's words plus the order status the bot found in the same chat. The example quotes in each deep dive come from the April to September 2026 analysis.</li>
+      <li>Complaint watch: each scenario's total for the time frame is compared with the previous period of the same length. A spike day is a day at least 1.5 times the 7-day average and 8 or more messages above it.</li>
+      <li>Keyword tagging is an estimate. Treat counts as directional, accurate for comparing scenarios and periods rather than exact totals.</li>
+    </ul>
+  </details>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SETTINGS: edit these lines
+// ============================================================
+const CONFIG = {
+  // Google Sheet "Publish to web" link in CSV format (File > Share > Publish to web > CSV)
+  DATA_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRGMFK-952N9nSsKiOEJ4JvnuKtdUoe3a7LzqG87yNbmdIcwS_gllZmA0NKsMDei5EGaVSV0qC0moLO/pub?output=csv',
+  // How dates are written in the sheet when they are not YYYY-MM-DD: 'DMY' (16/04/2026) or 'MDY' (04/16/2026)
+  DATE_ORDER: 'DMY',
+  // Time frame shown the first time someone opens the page: '7', '14', '30', '90' or 'all'
+  DEFAULT_RANGE: '30'
+};
+
+// Complaint Radar tagging engine: turns raw chat-log rows into per-day aggregates.
+// Same rules as the original analysis. Works in the browser and in Node (for testing).
+function createEngine(RX, RC, opts){
+  opts = opts || {};
+  const DATE_ORDER = opts.dateOrder || 'DMY';
+  const HARD = ['delivery','missing_wrong','quality','refund','store_cancel','promo','payment','account_app','no_response','bot_unhelpful'];
+  const SOFT = ['cancel_req','return_exch','want_human'];
+  const ALL = HARD.concat(SOFT);
+  const CAT = {}; for (const k in RX.cats) CAT[k] = new RegExp(RX.cats[k], 'i');
+  const NEG = new RegExp(RX.neg, 'i'), THREAT = new RegExp(RX.threat), OWN = new RegExp(RX.own, 'i');
+  const REF = /02[-\s]?\d|call center|คอลเซ็นเตอร์|ฝ่ายบริการลูกค้า|customer service|แบบฟอร์ม|forms\.office|อีเมล.{0,20}@|email us|contact our|ติดต่อเจ้าหน้าที่/i;
+  const NOTF = /ไม่พบ(คำสั่งซื้อ|ข้อมูลคำสั่งซื้อ)|could not find|couldn.t find|unable to find/;
+  const STATUS = {
+    DELIVERED: /\bDELIVERED\b|จัดส่งสำเร็จ|ส่งถึงแล้ว/,
+    PARTIAL: /PARTIALLY_FULFILLED/,
+    TRANSIT: /\bIN_TRANSIT\b|(?<!UN)\bFULFILLED\b|กำลังจัดส่ง|หมายเลขติดตามพัสดุ|KNJ\d/,
+    UNFULFILLED: /UNFULFILLED|ยังไม่ได้จัดส่ง|ยังไม่จัดส่ง/,
+    PENDING: /\bPENDING\b|รอการชำระ/
+  };
+  const RULES = {};
+  for (const k in RC) RULES[k] = { rules: RC[k].rules.map(([n, p]) => [n, new RegExp(p)]), fallback: RC[k].fallback, session: RC[k].session, index: RC[k].index };
+  const nCause = {}; for (const k of HARD) nCause[k] = Math.max(...Object.values(RC[k].index)) + 1;
+  const COLS = ['n','hard','neg','threat','sess','hsess','hmsgs','omsgs','refh','track3','notfound','slow'];
+  for (const k of ALL) COLS.push(k+'.n', k+'.s', k+'.g', k+'.r');
+  for (const k of HARD) for (let i = 0; i < nCause[k]; i++) COLS.push(`${k}.c${i}`);
+  for (let i = 0; i < 24; i++) COLS.push('h'+i);
+
+  const days = {}, sessions = new Map(), pending = [], queue = {};
+  let total = 0, skipped = 0;
+  const pad = n => String(n).padStart(2, '0');
+  const blank = () => { const o = {}; COLS.forEach(c => o[c] = 0); return o; };
+
+  function parseTs(v){
+    if (v instanceof Date && !isNaN(v)) return { d:`${v.getFullYear()}-${pad(v.getMonth()+1)}-${pad(v.getDate())}`, hh:v.getHours(), mm:v.getMinutes(), ss:v.getSeconds() };
+    const s = String(v == null ? '' : v).trim(); if (!s) return null;
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    let y, mo, d;
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else {
+      m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (!m) return null;
+      const a = +m[1], b = +m[2]; y = +m[3];
+      if (a > 12) { d = a; mo = b; } else if (b > 12) { mo = a; d = b; } else if (DATE_ORDER === 'MDY') { mo = a; d = b; } else { d = a; mo = b; }
+    }
+    if (y > 2400) y -= 543; // Thai Buddhist year
+    if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null;
+    return { d:`${y}-${pad(mo)}-${pad(d)}`, hh:+(m[4] || 0), mm:+(m[5] || 0), ss:+(m[6] || 0) };
+  }
+  function mask(t){
+    return String(t)
+      .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
+      .replace(/(?<!\d)0\d[\d\- ]{7,11}\d/g, '[phone]')
+      .replace(/((นางสาว|นาย|นาง|น\.ส\.)\s*|(คุณ|\bMrs?\.?|\bMs\.?)\s+)[^\s\d]+(\s+[^\s\d]{3,})?/g, '[name]')
+      .replace(/\d+\/\d+/g, '[address]')
+      .replace(/\s+/g, ' ').trim().slice(0, 220);
+  }
+  function addRow(row){
+    total++;
+    const ts = parseTs(row['Timestamp (BKK)'] ?? row['Timestamp'] ?? row['timestamp']);
+    if (!ts) { skipped++; return; }
+    const d = ts.d, key = `${d} ${pad(ts.hh)}:${pad(ts.mm)}:${pad(ts.ss)}`;
+    const q = String(row['Question'] ?? '').trim(), ql = q.toLowerCase();
+    const resp = String(row['Agent Response'] ?? '');
+    const tool = String(row['Tool Used'] ?? '').trim();
+    const sid = String(row['Session ID'] ?? '').trim();
+    const tag = {};
+    for (const k of ALL) tag[k] = CAT[k].test(ql);
+    if (tag.missing_wrong && OWN.test(ql)) tag.missing_wrong = false;
+    const neg = NEG.test(ql), threat = THREAT.test(ql);
+    const hard = neg || HARD.some(k => tag[k]);
+    const ref = REF.test(resp);
+    const a = days[d] || (days[d] = blank());
+    a.n++;
+    if (hard) { a.hard++; a['h'+ts.hh]++; if (ref) a.refh++; }
+    if (neg) a.neg++;
+    if (threat) a.threat++;
+    if (tool === 'order_status' && NOTF.test(resp)) a.notfound++;
+    const secs = parseFloat(row['Time Taken (s)']); if (secs > 15) a.slow++;
+    for (const k of ALL) if (tag[k]) { a[k+'.n']++; if (neg) a[k+'.g']++; if (ref) a[k+'.r']++; }
+    // session
+    let s = sessions.get(sid);
+    if (!s) { s = { first:key, d, n:0, h:false, t:0, c:{}, st:{} }; if (sid) sessions.set(sid, s); }
+    if (key < s.first) { s.first = key; s.d = d; }
+    s.n++; if (hard) s.h = true; if (tool === 'order_status') s.t++;
+    for (const k of ALL) if (tag[k]) s.c[k] = 1;
+    if (resp) for (const st in STATUS) if (!s.st[st] && STATUS[st].test(resp)) s.st[st] = true;
+    // root causes
+    for (const k of HARD) {
+      if (!tag[k]) continue;
+      const R = RULES[k]; let label = null;
+      for (const [n, re] of R.rules) if (re.test(ql)) { label = n; break; }
+      if (label === null && R.session.length) { pending.push([k, d, s]); continue; }
+      if (label === null) label = R.fallback;
+      const idx = R.index[label]; if (idx !== undefined) a[`${k}.c${idx}`]++;
+    }
+    // follow-up queue
+    if (hard) {
+      let sc = 0;
+      if (threat) sc += 5; if (tag.no_response) sc += 4;
+      if (tag.refund || tag.store_cancel || tag.payment) sc += 2; if (neg) sc += 2;
+      if (tag.delivery || tag.missing_wrong || tag.quality) sc += 1;
+      if (sc >= 3) (queue[d] || (queue[d] = [])).push([key, `${pad(ts.hh)}:${pad(ts.mm)}`, sid.slice(0, 8), sc, HARD.filter(k => tag[k]).concat(threat ? ['threat'] : [], neg ? ['angry'] : []), mask(q)]);
+    }
+  }
+  function finish(){
+    for (const [k, d, s] of pending) {
+      const R = RULES[k]; let label = R.fallback;
+      for (const [n, col] of R.session) if (s.st[col]) { label = n; break; }
+      const idx = R.index[label]; if (idx !== undefined) days[d][`${k}.c${idx}`]++;
+    }
+    for (const s of sessions.values()) {
+      const a = days[s.d]; if (!a) continue;
+      a.sess++; if (s.h) { a.hsess++; a.hmsgs += s.n; } else a.omsgs += s.n;
+      if (s.t >= 3) a.track3++;
+      for (const k in s.c) a[k+'.s']++;
+    }
+    const dates = Object.keys(days).sort();
+    const rows = dates.map(d => [d].concat(COLS.map(c => days[d][c])));
+    const Q = {};
+    for (const d of dates) {
+      const list = (queue[d] || []).sort((x, y) => y[3] - x[3] || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)).slice(0, 12);
+      Q[d] = list.map(x => x.slice(1));
+    }
+    return { cols: COLS, rows, queue: Q, total, skipped };
+  }
+  return { addRow, finish, COLS };
+}
+
+
+const RXS = {"cats": {"delivery": "ยังไม่ได้รับ(สินค้า|ของ|พัสดุ|เลขพัสดุ)?(?!เงิน)|ไม่ได้รับ(สินค้า|ของ|พัสดุ)|ยังไม่(ได้)?(ส่ง|จัดส่ง|มาส่ง|ได้ของ|ถึง|มา)|ส่งช้า|ช้ามาก|ช้าจัง|ล่าช้า|ทำไมช้า|นานจัง|นานมาก|รอนาน|ทำไมนาน|นานแล้ว|เลยกำหนด|เกินกำหนด|ของยังไม่มา|ไม่มีเลขพัสดุ|ไม่มีการเคลื่อนไหว|ไม่อัพเดท|ไม่อัปเดต|ของหาย|พัสดุหาย|not (yet )?received|haven'?t (yet )?receiv|didn'?t receiv|not deliver|taking so long|so long|too long|delay|still waiting|still not|where is my (order|parcel|package)|no tracking|not arrived|hasn'?t arrived|too late|lost (parcel|package)", "missing_wrong": "ไม่ครบ|ขาด\\s*\\d|ขาดไป|ขาดอีก|ขาดรายการ|ขาดสินค้า|ขาดรองเท้า|ขาดถุง|ขาดเสื้อ|ส่งผิด|ได้(รับ)?(สินค้า|ของ)?ผิด|ผิดสี|ผิดรุ่น|ส่งมาผิด|ไม่ตรงกับที่สั่ง|ไม่ตรงปก|ได้ไม่ครบ|ข้างเดียว|คนละ(ข้าง|ไซ|สี|รุ่น|คู่)|wrong (item|colou?r|size|product|shoe|order)|received the wrong|missing (item|product)|incomplete|only (one|1) (item|shoe)", "quality": "ชำรุด|ตำหนิ|เสียหาย|พัง(?!งา)|(?<!ห่วย)แตก(?!ต่าง)|ฉีกขาด|ขาดแล้ว|หลุด|(?<![หด])ลอก|ของปลอม|สินค้าปลอม|รองเท้าปลอม|เป็นของปลอม|ของมือสอง|มือสอง|คุณภาพ(ไม่|แย่|ต่ำ)|เคลม|ด้ายหลุด|รอยเปื้อน|สกปรก|เปื้อน|มีกลิ่น|damaged|defect|broken|\\btorn\\b|poor quality|bad quality|\\bfake (product|item|shoe)|counterfeit|used product|\\bdirty\\b|\\bstain|warranty claim", "refund": "(ยังไม่ได้|ไม่ได้)(รับ)?(เงิน|ยอด)คืน|เงินคืน.{0,25}(ยัง|เมื่อ|นาน|ไม่|ช้า|กี่วัน|ติดตาม)|คืนเงิน.{0,25}(ยัง|เมื่อ|นาน|ไม่ได้|ช้า|กี่วัน)|(ติดตาม|ตาม|เช็ค|ตรวจสอบ).{0,10}(การ)?คืนเงิน|เงินยังไม่เข้า|ไม่ได้เงิน|refund.{0,40}(when|yet|still|not|status|track|how long|where)|(when|where|still|not).{0,30}refund|haven.?t.{0,20}refund|money back", "store_cancel": "(โดน|ถูก)ยกเลิก|ยกเลิกให้เอง|ยกเลิกเอง|ร้านยกเลิก|ทางร้านยกเลิก|ระบบยกเลิก|ทำไม.{0,10}ยกเลิก|(สั่ง|จ่าย|ชำระ|โอน).{0,30}(แล้ว)?.{0,20}(หมด|ไม่มีของ|ไม่มีสินค้า)|ของหมด.{0,10}(แต่|ทำไม)|(you|was|were|been|got|has been|have been) cancel+ed|why.{0,20}cancel+ed|cancel+ed (my|by)|out of stock after", "cancel_req": "(ขอ|อยาก|ต้องการ|จะ|ช่วย)\\s*ยกเลิก|ยกเลิก(คำสั่ง|ออเดอร์|order|การสั่ง|สินค้า|รายการ)|^ยกเลิก|(want|like|need|please|how( do i| to| can i)?) (to )?cancel|cancel (my|the|this|order)", "return_exch": "คืนสินค้า|ขอคืน|ส่งคืน|อยากคืน|จะคืน|เปลี่ยน\\s*(ไซส์|ไซซ์|ไซร์|ไซด์|ไซค์|ไซต์|size|เบอร์)|เปลี่ยนสินค้า|เปลี่ยนคู่|เปลี่ยนรุ่น|เปลี่ยนสี|ขอเปลี่ยน|ใส่ไม่ได้|ไม่พอดี|คับเท้า|คับไป|คับมาก|ใส่คับ|หลวมไป|หลวมมาก|เล็กไป|ใหญ่ไป|return|exchange|too (small|big|tight|large)|doesn.?t fit|not fit", "promo": "(โค้ด|โค๊ด|code|คูปอง|coupon|voucher|ส่วนลด|โปร|promo).{0,40}(ใช้ไม่ได้|ใช้ไม่ไ|ไม่ได้|ไม่ลด|ไม่ขึ้น|หาย|error|invalid|ผิด|not work|doesn.?t work|didn.?t|not apply|can.?t)|ราคาไม่ตรง|ราคาไม่เหมือน|แพงกว่า|ราคาขึ้น|ไม่ได้ส่วนลด|ไม่ได้ลด|ไม่ลดราคา|price (is )?(wrong|different)|charged more", "payment": "ตัดเงิน|ตัดบัตร|หักเงิน|จ่ายเงิน(ไม่ได้|ไม่ผ่าน|แล้ว.{0,20}(ไม่|ยัง))|ชำระ(เงิน)?(ไม่ได้|ไม่ผ่าน|แล้ว.{0,20}(ไม่|ยัง))|โอน(เงิน)?(ไปแล้ว|แล้ว).{0,20}(ไม่|ยัง)|จ่ายซ้ำ|ตัดซ้ำ|โดนตัด|ผ่อน.{0,10}ไม่ได้|payment (fail|error|declin|not)|charged twice|double charg|been charged|card (was )?declined|paid but", "account_app": "otp|ล็อกอิน|ล็อคอิน|login|log in|เข้าสู่ระบบ(ไม่ได้)?|รหัสผ่าน|password|สมัคร(สมาชิก)?ไม่ได้|แอป.{0,15}(ไม่ได้|ค้าง|error|เด้ง|ล่ม|ไม่ขึ้น|ช้า)|เว็บ.{0,15}(ค้าง|error|ล่ม|ไม่ขึ้น|เข้าไม่ได้|ช้า)|ระบบ.{0,10}(ล่ม|ค้าง|error|มีปัญหา)|ใส่ที่อยู่ไม่ได้|กดไม่ได้|สั่งไม่ได้|สั่งซื้อไม่ได้|ชำระไม่ได้|(app|website|site).{0,20}(crash|error|not work|bug|down)|can.?t (log|sign|order|checkout)", "want_human": "ติดต่อ(เจ้าหน้าที่|พนักงาน|แอดมิน|คน)|คุยกับ(คน|เจ้าหน้าที่|พนักงาน|แอดมิน)|ขอ(คุย|สาย).{0,5}(คน|เจ้าหน้าที่|พนักงาน|แอดมิน)|ต่อสาย|ขอเบอร์|เบอร์(โทร)?ติดต่อ|call center|คอลเซ็นเตอร์|human|live agent|real person|(talk|speak|chat|connect).{0,15}(agent|staff|person|someone|representative|admin)|customer service|contact number", "no_response": "โทรไม่ติด|ไม่มีคนรับ|ไม่รับสาย|ไม่ตอบ(กลับ)?|ไม่มีการตอบ|ติดต่อไม่ได้|ติดต่อใครไม่ได้|ไม่มีใครตอบ|เงียบ|อ่านไม่ตอบ|ไม่ติดต่อกลับ|ไม่โทรกลับ|รอสาย|no (one )?(answer|response|reply)|not (answer|respond|reply)|can.?t (reach|contact)|nobody", "bot_unhelpful": "ไม่เข้าใจ|ตอบไม่ตรง|ไม่ตรงคำถาม|ไม่ได้ถาม(แบบ)?นี้|บอกแล้ว|ตอบวน|วนไปวนมา|ซ้ำ(ๆ|อยู่)|ไม่ช่วย(อะไร)?|ไม่มีประโยชน์|บอท|โง่|มั่ว|ไม่รู้เรื่อง|ไม่ได้เรื่อง|(^|\\s|เลย|ก็|มาก|ๆ)งง|งง(มาก|ค่ะ|ครับ|คะ|จัง|\\s|$|ๆ)|not helpful|useless|you don.?t understand|doesn.?t answer|not what i asked|stupid|nonsense|wrong answer|not talking to an ai|\\bstupid (bot|ai)"}, "neg": "แย่|ห่วย|ผิดหวัง|โกรธ|ไม่พอใจ|เซ็ง|หงุดหงิด|โมโห|โกง|หลอก|ร้องเรียน|สคบ|ไม่ประทับใจ|ไม่ไหว|เสียเวลา|ไม่(ซื้อ|สั่ง|ใช้บริการ)อีก|ไม่กล้าสั่ง|ฟ้อง|รำคาญ|เบื่อ|ทำไม.{0,20}(ไม่|ยัง|ช้า|นาน)|ผิดเงื่อนไข|ไม่รับผิดชอบ|อะไรวะ|ว่ะ|เหี้ย|สัส|ควาย|!{2,}|\\?{3,}|terrible|worst|awful|horrible|ridiculous|disappoint|angry|scam|unacceptable|frustrat|annoy|complain|rubbish|pathetic|never (buy|order) again|wtf", "threat": "สคบ|ฟ้อง|แจ้งความ|ร้องเรียน|social media|โซเชียล|โพสต์|ประจาน|pantip|ดำเนินคดี|ทนาย|complain|lawyer|consumer protection|ไม่(ซื้อ|สั่ง|ใช้บริการ)(อีก|แล้ว)|ซื้อที่อื่น|สั่งที่อื่น|ไปที่อื่น|ไม่กล้าสั่ง|ไม่กล้าซื้อ|never (buy|order|shop)|won.?t (buy|order|shop)", "own": "สั่งผิด|กดผิด|เลือกผิด|ใส่ผิด|i (placed|ordered|chose|selected).{0,15}wrong|ordered it wrong|ที่อยู่.{0,15}ไม่ครบ"};
+const RCS = {"delivery": {"rules": [["Marked delivered but customer has nothing", "(ขึ้น|สถานะ).{0,25}(สำเร็จ|ส่งแล้ว|ได้รับแล้ว|delivered|ถึงแล้ว)|นิติ|รปภ|ป้อม|ไม่มีใครรับ|says delivered|shows delivered|marked (as )?delivered|ของหาย|พัสดุหาย|lost"], ["Split shipment: part of the order still missing", "อีก\\s*\\d*\\s*(ชิ้น|รายการ|คู่|ตัว|กล่อง)|ไม่ครบ|ขาด|บางรายการ|ชิ้นเดียว|กล่องเดียว|อีกคู่|อีกตัว|อีกชิ้น|other (item|two|one)|only (got|received)|remaining|rest of"], ["No tracking number or no status update", "เลขพัสดุ|เลขแทร็ก|tracking|ไม่มีการแจ้ง|ไม่อัพเดท|ไม่อัปเดต|ไม่ขยับ|ไม่เคลื่อนไหว|สถานะไม่|ไม่มีความเคลื่อนไหว|ไม่แจ้ง"], ["Stuck at \"preparing to ship\" (not dispatched)", "เตรียมจัดส่ง|ยังไม่(ได้)?(ส่ง|จัดส่ง)|ยังไม่ออก|not (yet )?(ship|dispatch)|unfulfilled|รอจัดส่ง"], ["With courier too long", "ขนส่ง|kerry|flash|ไปรษณีย์|j&t|ninja|courier|ระหว่างทาง|in transit|transit"]], "fallback": "Reason not stated (asks \"where is my order\")", "session": [["Marked delivered but customer has nothing", "DELIVERED"], ["Split shipment: part of the order still missing", "PARTIAL"], ["Stuck at \"preparing to ship\" (not dispatched)", "UNFULFILLED"], ["With courier too long", "TRANSIT"], ["Payment still pending", "PENDING"]], "index": {"Stuck at \"preparing to ship\" (not dispatched)": 0, "Reason not stated (asks \"where is my order\")": 1, "With courier too long": 2, "Split shipment: part of the order still missing": 3, "Marked delivered but customer has nothing": 4, "No tracking number or no status update": 5}}, "store_cancel": {"rules": [["Item sold out after payment (oversold stock)", "หมด|ไม่มีของ|ไม่มีสินค้า|สต็อก|สต๊อก|stock|ยังมีของ|มีของอยู่|sold out"], ["Payment / QR not completed or expired", "qr|ชำระ.{0,10}(ไม่|ทัน|หมดเวลา)|หมดอายุ|ไม่ได้จ่าย|ยังไม่ได้ชำระ|expire|โอนไม่ทัน|ปลายทาง|cod"], ["Address cannot be delivered", "ที่อยู่|address|จัดส่งไม่ได้|ไม่สามารถจัดส่ง"], ["Partial cancellation, customer unsure which item", "บางรายการ|บางชิ้น|รายการไหน|ชิ้นไหน|ตัวไหน|some item|item\\(s\\)|อีกชิ้น|ถุงเท้า"], ["Asks only \"why was it cancelled\" (no reason given)", "ทำไม|เพราะอะไร|เหตุผล|สาเหตุ|why|reason"], ["Wants the money back after cancellation", "เงินคืน|คืนเงิน|refund|money"]], "fallback": "Confirming whether order was cancelled", "session": [], "index": {"Confirming whether order was cancelled": 0, "Asks only \"why was it cancelled\" (no reason given)": 1, "Wants the money back after cancellation": 2, "Partial cancellation, customer unsure which item": 3, "Item sold out after payment (oversold stock)": 4, "Payment / QR not completed or expired": 5, "Address cannot be delivered": 5}}, "refund": {"rules": [["Refund after store cancelled the order", "ยกเลิก|cancel"], ["Refund after returning items", "คืนสินค้า|ส่งคืน|คืนของ|return|ส่งของคืน|ส่งกลับ"], ["Refund for missing / undelivered items", "ไม่ได้รับ(สินค้า|ของ)|ไม่ครบ|ขาด|not received|missing"], ["Bank account / COD refund details", "บัญชี|เลขบัญชี|ปลายทาง|cod|โอนคืน|account|พร้อมเพย์"], ["How many days by payment method", "บัตร|credit|debit|กี่วัน|how long|ภายใน|วันทำการ|business day"]], "fallback": "General \"when will I get my money\" chasing", "session": [], "index": {"General \"when will I get my money\" chasing": 0, "Refund after store cancelled the order": 1, "How many days by payment method": 2, "Refund after returning items": 3, "Refund for missing / undelivered items": 4, "Bank account / COD refund details": 5}}, "missing_wrong": {"rules": [["Wrong size, colour or model sent", "ผิด\\s*(ไซ|สี|รุ่น|ข้าง|คู่|เบอร์)|ส่งผิด|ได้(รับ)?(สินค้า|ของ)?ผิด|wrong|คนละ|ข้างเดียว|คนละข้าง|ไม่ตรงกับที่สั่ง"], ["Product not as pictured", "ไม่ตรงปก|ไม่เหมือนรูป|not as (pictured|described)"], ["Item missing from the delivered box", "ในกล่อง|เปิดกล่อง|กล่อง|แกะ|box|package"]], "fallback": "Incomplete order (rest of items not arrived yet)", "session": [], "index": {"Incomplete order (rest of items not arrived yet)": 0, "Wrong size, colour or model sent": 1, "Product not as pictured": 2, "Item missing from the delivered box": 3}}, "quality": {"rules": [["Suspected fake product", "ปลอม|fake|counterfeit|แท้"], ["Damaged in transit / box damaged", "กล่อง|ขนส่ง|box|transit|บุบ|แพ็ค"], ["Wore out quickly (warranty / claim)", "เคลม|ประกัน|ใช้(ได้|ไป)(แค่|เพียง)?\\s*\\d|ใช้ไป|ใส่ไป|หลังซัก|ซัก|warranty|claim|after|weeks|month|พื้น(เปิด|หลุด|ปริ)|ลอก|หลุด|ปริ"], ["Stained, dirty or used-looking", "เปื้อน|สกปรก|มือสอง|ใช้แล้ว|dirty|stain|used"]], "fallback": "Defect on arrival (flaw, broken part)", "session": [], "index": {"Wore out quickly (warranty / claim)": 0, "Defect on arrival (flaw, broken part)": 1, "Suspected fake product": 2, "Stained, dirty or used-looking": 3, "Damaged in transit / box damaged": 4}}, "promo": {"rules": [["Advertised discount not shown on product page", "โฆษณา|facebook|ads?\\b|ไม่ลดราคาตาม|ราคาไม่ตรง|ราคาไม่เหมือน|ราคาขึ้น|แพงกว่า|price"], ["Minimum spend misunderstood", "ครบ|ยอด|เกิน|\\d,?\\d{3}|minimum|spend"], ["Item or brand excluded from the code", "กับ(สินค้า|รุ่น|แบรนด์|ตัว|บาง)|บางรายการ|ไม่ร่วม|ไม่เข้าร่วม|some items|exclud|asics|nike|adidas|wilson|nitro|on |items?"], ["Email / app code says invalid", "email|อีเมล|เมล|your\\d+|app\\d*|sspapp|invalid|ไม่ถูกต้อง|the1|gift"], ["New-member / first-order code fails", "welcome|new\\d*|ครั้งแรก|ลูกค้าใหม่|first|สมัคร"], ["Code lost after order cancelled", "ยกเลิก|cancel|หาย|ใช้ไปแล้ว|ใช้อีก"]], "fallback": "Code fails, no reason given", "session": [], "index": {"Code fails, no reason given": 0, "Minimum spend misunderstood": 1, "New-member / first-order code fails": 2, "Code lost after order cancelled": 3, "Email / app code says invalid": 4, "Item or brand excluded from the code": 5, "Advertised discount not shown on product page": 6}}, "payment": {"rules": [["Charged but order cancelled / not shipped", "(ตัด|หัก).{0,15}(แล้ว|ไป)|ยกเลิก|ไม่ส่ง|charged|paid but"], ["Paid but order still shows unpaid", "(จ่าย|ชำระ|โอน).{0,10}แล้ว.{0,25}(ไม่ขึ้น|ยัง|ไม่อัพ|ไม่อัป)|ไม่ขึ้นว่าจ่าย"], ["Cash on delivery not offered", "ปลายทาง|cod|cash on"], ["Checkout button / page stuck", "กด|หมุน|ค้าง|เลื่อน|ไม่ขยับ|ไม่มีให้เลือก|stuck"], ["Address error blocks payment", "ที่อยู่|address|จัดส่งไม่ได้"]], "fallback": "Payment failed, no detail", "session": [], "index": {"Payment failed, no detail": 0, "Checkout button / page stuck": 1, "Charged but order cancelled / not shipped": 2, "Paid but order still shows unpaid": 3, "Cash on delivery not offered": 4, "Address error blocks payment": 5}}, "account_app": {"rules": [["OTP code not received", "otp|รหัส\\s*\\d|code 6|6 หลัก"], ["Cannot log in (phone / Gmail / password)", "login|log in|ล็อก|ล็อค|เข้าสู่ระบบ|เข้าระบบ|รหัสผ่าน|password|gmail"], ["Cannot place order in app / web", "สั่ง(ซื้อ)?ไม่ได้|กดไม่ได้|order|checkout|ใส่ที่อยู่ไม่ได้"]], "fallback": "App or website error", "session": [], "index": {"OTP code not received": 0, "Cannot log in (phone / Gmail / password)": 1, "Cannot place order in app / web": 2, "App or website error": 3}}, "no_response": {"rules": [["Call center does not pick up", "โทร|สาย|call|phone"], ["Email not answered", "email|อีเมล|เมล"], ["LINE / chat / Facebook not answered", "ไลน์|line|แชท|chat|เพจ|facebook|inbox|ทัก"], ["Promised follow-up never came", "ติดต่อกลับ|โทรกลับ|แจ้งกลับ|รอ|ตอบกลับ"]], "fallback": "General \"nobody answers\"", "session": [], "index": {"General \"nobody answers\"": 0, "Call center does not pick up": 1, "Email not answered": 2, "LINE / chat / Facebook not answered": 3, "Promised follow-up never came": 4}}, "bot_unhelpful": {"rules": [["Bot cannot take action (cancel, refund, change)", "ทำอะไร|can.?t (actually )?do|ยกเลิก|cancel|refund|คืนเงิน|เปลี่ยน|แก้"], ["Bot repeats itself / loops", "วน|ซ้ำ|เหมือนเดิม|บอกแล้ว|again|same"], ["Answer does not match the question", "ไม่ตรง|ไม่เข้าใจ|not what|don.?t understand|wrong answer|มั่ว"]], "fallback": "General frustration with the bot", "session": [], "index": {"General frustration with the bot": 0, "Answer does not match the question": 1, "Bot cannot take action (cancel, refund, change)": 2, "Bot repeats itself / loops": 3}}};
+const DD = {
+"delivery":{"tier":"Critical","owner":"Warehouse and logistics","real":"Most of these orders were never late in transit. They were paid for but still sitting in the warehouse, and nobody told the customer.","fix":"Set a dispatch target, add pick-and-pack staff before sales, and auto-send a delay message with a new date.",
+ "causes":[
+  ["Order paid but not dispatched yet (stuck at \"preparing to ship\")",1531,"ทำไมถึงยังไม่จัดส่ง ฉันจ่ายเงินแล้ว","Why hasn't it shipped yet? I've already paid."],
+  ["Customer can't see where the order is, so asks the bot",472,"ทำไมยังไม่ได้รับของคะ","Why haven't I received my order?"],
+  ["Parcel is with the courier but slow in transit",313,"พัสดุยังไม่ถึงเลยครับ","My parcel still hasn't arrived."],
+  ["Order was split into parcels; the rest is coming separately",252,"ช่วยแจ้งว่า สินค้า ชิ้นไหน อยู่พัสดุไหน ด้วยคะ เพราะตอนนี้ ยัง มี 3 ชิ้น ยังไม่ได้รับ","Please tell me which item is in which parcel. 3 items still haven't arrived."],
+  ["Courier marked it delivered; parcel left elsewhere or lost",244,"สถานะขนส่งขึ้นสำเร็จแล้ว แต่นิติบอกไม่ได้รับของอะคะ ไม่ทราบว่ามีรูปหรือหลักฐานการส่งของมั้ยคะ","Tracking says delivered, but the condo office says nothing came. Is there a photo or proof of delivery?"],
+  ["Tracking number not sent or not updating",131,"สั่งของแล้วยังไม่ได้รับเลขพัสดุ","I ordered but still have no tracking number."]]},
+"store_cancel":{"tier":"Critical","owner":"E-commerce and inventory","real":"The website sold stock it did not have. The cancellation notice names no item and no reason, so customers ask what happened and where their money is.","fix":"Reserve stock at payment, keep a buffer on sale items, and send a notice that names the item, the reason and the refund date.",
+ "causes":[
+  ["Notice is unclear; customer unsure what was cancelled",669,"โดนยกเลิก หลายอย่างมาก คือยังไง","Lots of my items were cancelled. What does this mean?"],
+  ["No reason given (usually out of stock after payment)",351,"ทำไมถึงยกเลิกคะ ตั้งใจสั่งมากๆ","Why was it cancelled? I really wanted this."],
+  ["Customer paid; refund steps and timing not explained",314,"ชำระเงินโอน แต่ทางร้านยกเลิกสินค้าคืนเงินยัง","I paid by transfer and the shop cancelled. Has my money been returned?"],
+  ["Notice says \"some items\" without naming them",131,"ชิ้นไหนถูกยกเลิกครับ","Which item was cancelled?"],
+  ["Website sold an item that was already out of stock",130,"ฉันเพิ่งสั่งซื้อไปแล้ว มันขึ้นว่าของหมด","I just ordered and now it says sold out."],
+  ["Unpaid QR order cancelled automatically",11,"ถ้าไม่ได้จ่ายเงินออร์เดอร์จะยกเลิกเองอัตโนมัติ ไม่จัดส่งใช่ไหม","If I don't pay, is the order cancelled automatically?"]]},
+"missing_wrong":{"tier":"High","owner":"Warehouse and CRM","real":"85% of \"missing item\" messages are split shipments. The other items were on their way in another parcel, but the customer was not told the order ships in parts.","fix":"Tell customers how many parcels to expect at checkout and in the shipping email, with one tracking line per item.",
+ "causes":[
+  ["Split shipment: the rest of the order is in another parcel",1072,"ได้สินค้า ที่สั่งไม่ครบ","I didn't get everything I ordered."],
+  ["Picking or packing error: wrong size, colour or model",171,"ส่งของมาให้ผิดรุ่นอ่ะครับ","You sent me the wrong model."],
+  ["Product photo or description differs from the item",13,"ได้หมวกสีม่วงโลโก้ไม่ตรงปก","I got the purple cap and the logo doesn't match the picture."],
+  ["Item left out of a delivered box",10,"ได้รับสินค้า ไม่ครบตามรายการค่ะ ขาด Reebox studio Style Women's จำนวน 1 ตัวค่ะ","An item on my order is missing: one Reebok Studio Style women's top."]]},
+"refund":{"tier":"Critical","owner":"Finance and CRM","real":"Customers cannot see refund status anywhere. Card refunds take 20 to 30 business days, so they keep asking for a month or more.","fix":"Show refund status on the order page and in the bot, and send a \"refund sent\" message with the bank reference.",
+ "causes":[
+  ["No refund status to check, so the customer asks",610,"จะคืนเงินให้เมื่อไหร่","When will you refund me?"],
+  ["Refund for a store-cancelled order waits on a form and the bank",215,"โดนยกเลิกไปกรอกข้อมูลคืนเงินมาตั้งนานแล้วไม่มีเห็นคืนเงินเลย","My order was cancelled. I filled in the refund form long ago and still nothing."],
+  ["Timeline differs by payment method and is long for cards",117,"ระยะเวลาคืนเงินกี่วัน","How many days does a refund take?"],
+  ["Refund starts only after the return is received and checked",93,"ผมคืนสินค้าไปแล้ว1อาทิตย์ กี่วันจะได้เงินคืน หรือติดตามผมยังไงคับ","I returned it a week ago. How many days until the refund, or how do I track it?"],
+  ["No clear path for refunds on undelivered items",28,"ไม่ได้รับของแล้วจะขอเงินคืนยังไง","I never got the item. How do I get a refund?"],
+  ["COD or transfer refund needs bank details via a form",21,"กลัวไม่ได้เงินคืน ผมส่งเลขบัญชีไปทางไลน์","I'm worried I won't get my money back. I sent my bank account number on LINE."]]},
+"account_app":{"tier":"High","owner":"IT and app team","real":"Login depends on an SMS OTP that often doesn't arrive, and email or Gmail users can no longer sign in. Both block the purchase completely.","fix":"Monitor SMS OTP delivery, add an email OTP fallback, and explain the current login options.",
+ "causes":[
+  ["SMS OTP not delivered",317,"กรอกเบอร์โทรศัพท์ รอเลข OTP แต่ไม่ข้อความส่งมาให้ค่ะ","I entered my phone number and waited, but no OTP message came."],
+  ["Login is phone-only; email and Gmail users are stuck",281,"การล็อคอินเข้า เว็ปทำไมถึงไม่มีให้เรากรอกอีเมล์เพื่อล็อคอิน ครับ","Why can't I log in to the website with my email?"],
+  ["Order button blocked (size out of stock, address, app error)",148,"กดสั่งไม่ได้เกิดจากอะไรครับ","Why can't I place the order?"],
+  ["App install or system error",48,"เปลี่ยนมือถือใหม่ติเตั้งแอปไม่ได้เลยค่ะ","I changed phones and can't install the app."]]},
+"no_response":{"tier":"High","owner":"Customer service lead","real":"The bot sends customers to the call center, email or LINE, but those channels do not answer in time. Customers come back angrier, and some threaten to complain to the consumer board.","fix":"Replace the phone number with an in-chat ticket and a reply promise, and add staff on sale days.",
+ "causes":[
+  ["Tried several channels after the bot referred them; no answer",158,"I have tried contacting them various places but still no reply","I have tried contacting them in various places but still no reply."],
+  ["Call center doesn't pick up, worst on holidays and sale days",109,"ฉันไม่ได้รับการติดต่อกลับ โทรไปที่คอลเซนเตอร์ก็ไม่มีคนรับสาย","No one called me back, and nobody answers at the call center."],
+  ["Email backlog beyond the promised 1 business day",43,"ติดต่อไปทางอีเมลแล้วไม่มีใครตอบกลับเลย","I emailed and nobody replied."],
+  ["LINE admin backlog",40,"ผมติดต่อไปทาง LINE แล้วเค้ายังไม่ตอบผมเลยครับ","I contacted you on LINE and still no reply."],
+  ["Promised follow-up never came",22,"ติดต่อไปแล้วค่ะ ไม่ตอบกลับเหมือนเดิม","I already contacted you. Still no reply, same as before."]]},
+"promo":{"tier":"Medium","owner":"Marketing and e-commerce","real":"Checkout says a code is invalid but never says why. Customers can't tell if it's the minimum spend, an excluded brand or a first-order rule. This topic has the angriest wording (21%).","fix":"Show the exact reason a code fails, and let the bot check the cart against the code rules.",
+ "causes":[
+  ["Checkout rejects the code without a reason",149,"ทำไมใช้ส่วนลด SUPER15 ไม่ได้","Why can't I use the SUPER15 discount?"],
+  ["Minimum spend counts only eligible items",60,"ฉันซื้อของครบ5000 แต่ทำไมใช้คูปองส่วนลด MEGA1500 ไม่ได้","I spent 5,000. Why can't I use MEGA1500?"],
+  ["Welcome-code rules (first order, account) not explained",39,"ทำไมลูกค้าใหม่ ใส่ code welcome600 แล้วไม่ลดให้","I'm a new customer. Why doesn't WELCOME600 give a discount?"],
+  ["One-time code not returned after a cancelled order",30,"สั่งซื้อสินค้าไปแล้วโดนยกเลิก คูปอง YOUR400 ใช้ไปแล้วก็ไม่ได้คืน","My order was cancelled and the YOUR400 coupon I used was not returned."],
+  ["Partner codes (The 1) can't be used online yet",28,"ทำไมแลกส่วนลดในapp the 1 มาแล้วใช้ไม่ได้","Why doesn't the discount I redeemed in The 1 app work?"],
+  ["Sale items or some brands excluded",24,"โค้ดส่วนลดใช้กับสินค้าลดราคาไม่ได้หรอคะ","Can't discount codes be used on sale items?"],
+  ["Ad price and app price out of sync",21,"โฆษณาในfacebook ลด25% แต่ทำไมเปิดมาที่แอพสินค้าไม่ลดราคาตามที่โฆษณา","The Facebook ad says 25% off, but the app price isn't reduced."]]},
+"payment":{"tier":"Medium","owner":"Payments and IT","real":"Checkout fails or hangs without an error message, and paid orders can take time to show as paid. Each case is a lost or delayed sale.","fix":"Monitor checkout errors by payment method, show a clear error, and use a \"payment pending\" state.",
+ "causes":[
+  ["Checkout fails with no error message",140,"สั่งของแล้วชำระเงินไม่ได้ค่ะ","I ordered but can't pay."],
+  ["Payment page hangs",66,"ผมกดชำระเงินไม่ได้ พอกดแล่วก็หมุนๆ","I can't pay. When I press it, it just spins."],
+  ["Charged, then the order was cancelled (often out of stock)",38,"ตัดบัตรเครดิตไปแล้ว ผ่านมาวันนึง บอกถูก cancle","My card was charged, and a day later I was told it was cancelled."],
+  ["Payment confirmation slow to reach the order",28,"รายการที่สั่งซื้อสินค้าที่ชำระแล้วไม่ขึ้นครับ","The order I paid for doesn't show up."],
+  ["Cash on delivery not offered for some items, not explained",9,"กดชำระเงินแล้วไม่มีให้เก็บปลายทาง","There's no cash on delivery option at checkout."],
+  ["Address check blocks payment",2,"สั่งสินค้าแล้ว แต่ชำระเงินไม่ได้ ระบบแจ้งว่าที่อยู่ไม่ถูกต้องค่ะ","I ordered but can't pay. It says my address is invalid."]]},
+"quality":{"tier":"Medium","owner":"Quality control and CS","real":"Most cases are wear after a few weeks of use, which needs a brand warranty claim. There is no simple online claim, so 58% of these customers are sent to the call center.","fix":"Add an online claim form with photo upload and a warranty page per brand.",
+ "causes":[
+  ["Product failed after use; needs a warranty claim",118,"สั่งซื้อรองเท้ามาใส่ได้ครั้งเดียว 40km รองเท้าเกิดกาวหลุด","I wore the shoes once for 40 km and the glue came apart."],
+  ["Defect missed before shipping",106,"เสื้อสั่งมาแล้วมีตำหนิตำ ต้องทำยังไงคะ","The shirt arrived with a flaw. What should I do?"],
+  ["Fake pages or links imitating Supersports",23,"เคยกดสั่งผ่านลิงค์ แล้วได้สินค้าของปลอม","I once ordered through a link and got a fake."],
+  ["Item stained or looks used",17,"ได้รับสินค้ามีรอยเปื้อนค่ะ","The item I received has stains."],
+  ["Damaged by the courier or weak packing",15,"ทางขนส่งแจ้งว่าสินค้าได้รับความเสียหายครับ","The courier told me the item was damaged."]]},
+"bot_unhelpful":{"tier":"Acceptable","owner":"Chatbot team","real":"The customer needs an action or a person, and the bot can only explain policy. Most of these go away when the fixes above land.","fix":"Add a clear \"talk to a person\" path and stop repeating the same answer after two tries.",
+ "causes":[
+  ["Customer needs a person or an action, not information",146,"โอเค คุยกันไม่รู้เรื่อง","OK, this conversation makes no sense."],
+  ["Bot picked the wrong answer",63,"ตอบไม่ตรงกับคำถามเลยนะ","That doesn't answer my question."],
+  ["Bot can't push a refund or cancellation",19,"มันเกิน 60 วันแล้วนะคะคุณทำไมยังไม่คืนเงินอีกไม่เข้าใจเลยค่ะ","It's been over 60 days. Why haven't you refunded me? I don't understand."],
+  ["Bot repeats the same answer",10,"จะส่งข้อความเดิมมาซ้ำๆเพื่อ","Why do you keep sending the same message?"]]}
+}
+;
+const QUOTES = [{"k": "delivery", "th": "ทำไมถึงยังไม่ได้จัดส่งคะ สั่งไปหลายวันแล้ว", "en": "Why hasn't it shipped yet? I ordered days ago.", "d": "2026-04-27"}, {"k": "delivery", "th": "สถานะเตรียมจัดส่ง ทำไมนานจัง", "en": "Status still says 'preparing to ship'. Why is it taking so long?", "d": "2026-04-19"}, {"k": "delivery", "th": "ใช้บริการ Supersports มาหลายปี การจัดส่งบริการได้แย่กว่าร้านอื่นๆ เลย", "en": "I've shopped with Supersports for years. Delivery is worse than other stores.", "d": "2026-07-09"}, {"k": "missing_wrong", "th": "ส่งมาแค่ชิ้นเดียว ยังขาดเสื้อ Umbro", "en": "Only one item arrived. The Umbro shirt is still missing.", "d": "2026-04-30"}, {"k": "missing_wrong", "th": "Hello i ordered some training shoes but the wrong colour was delivered", "en": "", "d": "2026-09-01"}, {"k": "store_cancel", "th": "พอดีว่าโอนเงินซื้อสินค้าไปแล้ว วันต่อมาบอกว่าถูกยกเลิก ตอนนี้ยังไม่ได้เงินคืนเลยค่ะ", "en": "I paid, the next day I was told the order was cancelled, and I still haven't got my money back.", "d": "2026-07-16"}, {"k": "store_cancel", "th": "สินค้าขึ้นว่ามีของในระบบ พอสั่งแล้ว ตัดเงินแล้ว แจ้งว่าบอกหมด", "en": "The site showed it in stock. After I ordered and was charged, I was told it's sold out.", "d": "2026-07-01"}, {"k": "refund", "th": "คืนของครบ 7 วันแล้ว แต่ยังไม่ได้เงินคืน", "en": "I returned the items 7 days ago and still have no refund.", "d": "2026-06-08"}, {"k": "quality", "th": "The shoe I recently bought from you is already damaged", "en": "", "d": "2026-09-11"}, {"k": "quality", "th": "ได้รับสินค้าใหม่ แต่รองเท้าเปื้อน", "en": "Received a new product but the shoes are stained.", "d": "2026-08-02"}, {"k": "promo", "th": "ได้รับ email ว่าใช้ code YOUR20 ได้ส่วนลด 20% แต่พอนำมาใช้กลับใช้ไม่ได้ แจ้งว่า code is not valid", "en": "The email said YOUR20 gives 20% off, but at checkout it says 'code is not valid'.", "d": "2026-08-23"}, {"k": "promo", "th": "ใส่ของเกิน 10,000 ทำไมกดโค้ด mega3500 ไม่ได้", "en": "My cart is over 10,000 baht. Why won't MEGA3500 apply?", "d": "2026-05-26"}, {"k": "payment", "th": "ซื้อรองเท้าผ่านแอพไปเมื่อวาน ตัดเงินไปแล้ว แต่ประวัติไม่ขึ้น", "en": "Bought shoes in the app yesterday. I was charged, but the order isn't in my history.", "d": "2026-04-27"}, {"k": "account_app", "th": "ทำไมเข้าระบบไม่ได้สักที ให้เบอร์โทรแล้ว ส่ง otp ไม่เห็นมาสักที", "en": "Why can't I log in? I entered my phone number but the OTP never arrives.", "d": "2026-04-25"}, {"k": "no_response", "th": "ติดต่อทาง email เงียบ ทางโทรศัพท์รอจนสายตัด", "en": "Email: silence. Phone: I waited until the call dropped.", "d": "2026-07-17"}, {"k": "no_response", "th": "ทักไลน์แล้วไม่มีใครตอบครับ", "en": "I messaged on LINE and nobody replied.", "d": "2026-04-20"}, {"k": "bot_unhelpful", "th": "What's the point of having you if you can't actually do anything. Useless.", "en": "", "d": "2026-07-27"}, {"k": "bot_unhelpful", "th": "ไม่มีประโยชน์ ไม่สามารถแก้ปัญหาให้ลูกค้าได้เลย", "en": "Useless. You can't solve any customer problem.", "d": "2026-07-13"}, {"k": "threat", "th": "ถ้าไม่คืน ผมจะฟ้อง สคบ. และเรียกค่าเสียหายพร้อมค่าเสียเวลาด้วย", "en": "If you don't refund me, I'll file with the consumer protection board and claim damages for my time.", "d": "2026-08-03"}, {"k": "threat", "th": "ผิดหวังจริงๆ จะสั่งรองเท้าก็ไม่กล้าสั่ง คงต้องไปสั่งกับที่อื่น", "en": "Really disappointed. I don't dare order shoes here anymore, I'll have to buy elsewhere.", "d": "2026-07-12"}];
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const pct = (x,d=1) => isFinite(x)?(x*100).toFixed(d)+'%':'·';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fdate = s => new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+const fshort = s => new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+const utc = s => new Date(s+'T00:00:00Z');
+const HARD = ['delivery','missing_wrong','quality','refund','store_cancel','promo','payment','account_app','no_response','bot_unhelpful'];
+const SOFTK = ['cancel_req','return_exch','want_human'];
+const LABEL = {delivery:'Late or not received delivery',missing_wrong:'Missing or wrong items',quality:'Damaged or defective product',refund:'Refund not received / slow',store_cancel:'Order cancelled by store after payment',promo:'Promo code or price not working',payment:'Payment failed or charged without order',account_app:'OTP, login or app problems',no_response:'Staff unreachable / no reply',bot_unhelpful:'Chatbot answer not helpful',cancel_req:'Wants to cancel an order',return_exch:'Wants to return or exchange (size, fit)',want_human:'Asks to talk to a human'};
+let KEYS = [];
+let DAYS = [];
+let QUEUE = {};
+let R0 = 0, R1 = 0;
+const dayIdx = d => DAYS.findIndex(r=>r.d===d);
+
+// ---------- chart helpers ----------
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function tipFor(host){const t=document.createElement('div');t.className='tip';host.appendChild(t);return{show(html,x,y){t.innerHTML=html;t.style.left=x+'px';t.style.top=(y-8)+'px';t.style.opacity=1},hide(){t.style.opacity=0}}}
+function niceMax(v){if(v<=0)return 1;const p=Math.pow(10,Math.floor(Math.log10(v)));const m=v/p;return (m<=1?1:m<=2?2:m<=2.5?2.5:m<=5?5:10)*p;}
+function rr(x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h));return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`;}
+function wrapPos(host,svg,cx,cy){const b=svg.getBoundingClientRect(),hb=host.getBoundingClientRect();const vb=svg.viewBox.baseVal;return [b.left-hb.left+host.scrollLeft+cx*b.width/vb.width, b.top-hb.top+cy*b.height/vb.height];}
+
+// ---------- range sums & buckets ----------
+function sumRange(a,b){const o={};KEYS.forEach(k=>o[k]=0);for(let i=a;i<=b;i++){const r=DAYS[i];KEYS.forEach(k=>o[k]+=r[k]||0);}return o;}
+function weekKey(d){const x=utc(d);const dow=(x.getUTCDay()+6)%7;x.setUTCDate(x.getUTCDate()-dow);return x.toISOString().slice(0,10);}
+function buckets(mode){
+  const out=[];let cur=null;
+  for(let i=R0;i<=R1;i++){const d=DAYS[i].d;const key=mode==='day'?d:mode==='week'?weekKey(d):d.slice(0,7);
+    if(!cur||cur.key!==key){cur={key,from:i,to:i};out.push(cur);}else cur.to=i;}
+  out.forEach(b=>{Object.assign(b,sumRange(b.from,b.to));b.ndays=b.to-b.from+1;b.full=mode==='day'||(mode==='week'?b.ndays===7:b.ndays===new Date(Date.UTC(+b.key.slice(0,4),+b.key.slice(5,7),0)).getUTCDate());});
+  return out;
+}
+function bLabel(b,mode,long){if(mode==='month')return new Date(b.key+'-01T00:00:00').toLocaleDateString('en-GB',long?{month:'long',year:'numeric'}:{month:'short'});if(mode==='week')return (long?'Week of ':'')+fshort(b.key);return long?fdate(b.key):fshort(b.key);}
+
+// ---------- time frame filter ----------
+const PRESETS=['7','14','30','90','all'];
+function setRange(from,to,keepSel){
+  if(from>to)[from,to]=[to,from];
+  let a=DAYS.findIndex(r=>r.d>=from);let b=-1;for(let i=DAYS.length-1;i>=0;i--){if(DAYS[i].d<=to){b=i;break;}}
+  if(a<0)a=DAYS.length-1;if(b<0)b=0;if(a>b)a=b;
+  R0=a;R1=b;qAll=false;
+  try{localStorage.setItem('radar-range',JSON.stringify([DAYS[R0].d,DAYS[R1].d]));}catch(e){}
+  renderAll();
+}
+function applyPreset(p){const last=DAYS.length-1;const a=p==='all'?0:Math.max(0,last-(+p)+1);setRange(DAYS[a].d,DAYS[last].d);}
+$('f-presets').addEventListener('click',e=>{const b=e.target.closest('button');if(b)applyPreset(b.dataset.p);});
+$('f-from').addEventListener('change',e=>{if(e.target.value)setRange(e.target.value,$('f-to').value||DAYS[R1].d);});
+$('f-to').addEventListener('change',e=>{if(e.target.value)setRange($('f-from').value||DAYS[R0].d,e.target.value);});
+function renderFilter(S){
+  const n=R1-R0+1;
+  $('fb-sum').textContent=`${fdate(DAYS[R0].d)} to ${fdate(DAYS[R1].d)} · ${n} day${n>1?'s':''}`;
+  ['f-from','f-to'].forEach(id=>{$(id).min=DAYS[0].d;$(id).max=DAYS[DAYS.length-1].d;});
+  $('f-from').value=DAYS[R0].d;$('f-to').value=DAYS[R1].d;
+  const last=DAYS.length-1;
+  document.querySelectorAll('#f-presets button').forEach(b=>{const p=b.dataset.p;const a=p==='all'?0:Math.max(0,last-(+p)+1);b.setAttribute('aria-pressed',R1===last&&R0===a);});
+  $('m-range').textContent=`${fdate(DAYS[R0].d)} to ${fdate(DAYS[R1].d)}`;
+  $('m-msgs').textContent=fmt(S.n)+' messages';$('m-sess').textContent=fmt(S.sess)+' chats';
+  $('src').textContent=fmt(sumRange(0,DAYS.length-1).n);
+  $('g-title').textContent=`${fdate(DAYS[R0].d)} to ${fdate(DAYS[R1].d)} at a glance`;
+}
+
+// ---------- KPIs & findings ----------
+function catStats(S){return HARD.map(k=>({k,label:LABEL[k],n:S[k+'.n'],sess:S[k+'.s'],neg:S[k+'.n']?S[k+'.g']/S[k+'.n']:0,referred:S[k+'.n']?S[k+'.r']/S[k+'.n']:0})).sort((a,b)=>b.n-a.n);}
+function renderKPIs(S){
+  const rate=S.n?S.hard/S.n:0;
+  $('k-rate').textContent=pct(rate);$('k-rate-d').textContent=S.hard?`${fmt(S.hard)} messages, about 1 in ${Math.max(1,Math.round(1/rate))}`:'no complaints';
+  $('k-sess').textContent=pct(S.sess?S.hsess/S.sess:0);$('k-sess-d').textContent=`${fmt(S.hsess)} of ${fmt(S.sess)} chats`;
+  $('k-neg').textContent=fmt(S.neg);$('k-human').textContent=fmt(S['want_human.n']);$('k-threat').textContent=fmt(S.threat);
+}
+function renderFindings(S,cats){
+  const fx=[];const top=cats[0];
+  if(top&&top.n){fx.push({sev:'var(--hot)',tag:'Biggest issue',h:top.label,p:`<strong>${fmt(top.n)}</strong> messages, ${pct(S.hard?top.n/S.hard:0,0)} of complaints in this time frame. ${pct(top.neg,0)} are written in an angry tone and the bot sent ${pct(top.referred,0)} to the call center.`});}
+  const n=R1-R0+1, mode=n>=14?'week':'day';const bs=buckets(mode);
+  if(bs.length>1&&S.hard){const pk=bs.reduce((a,b)=>b.hard>a.hard?b:a);const drivers=HARD.map(k=>[k,pk[k+'.n']]).sort((a,b)=>b[1]-a[1]).slice(0,3).filter(x=>x[1]>0);
+    fx.push({sev:'var(--warn)',tag:mode==='week'?'Peak week':'Peak day',h:`${bLabel(pk,mode,true)}${pk.full?'':' (partial)'}`,p:`<strong>${fmt(pk.hard)}</strong> complaints, ${pct(pk.n?pk.hard/pk.n:0)} of messages against ${pct(S.hard/S.n)} for the whole time frame. Top drivers: ${drivers.map(x=>LABEL[x[0]].toLowerCase()+' ('+fmt(x[1])+')').join(', ')}.`});}
+  const oc=S.sess-S.hsess;
+  fx.push({sev:'var(--accent)',tag:'Service gap',h:'The bot hands off, then customers get stuck',p:`Complaint chats take <strong>${S.hsess?(S.hmsgs/S.hsess).toFixed(1):'·'} messages</strong> vs ${oc?(S.omsgs/oc).toFixed(1):'·'} for other chats. ${pct(S.hard?S.refh/S.hard:0,0)} of complaint replies send the customer to the call center, and ${fmt(S['no_response.n'])} messages say staff never answered.`});
+  $('findings').innerHTML=fx.map(f=>`<article class="finding" style="--sev:${f.sev}"><span class="sev">${f.tag}</span><h3>${esc(f.h)}</h3><p>${f.p}</p></article>`).join('');
+}
+
+// ---------- priorities ----------
+const PRIO=[
+ ['Critical','Orders stuck before dispatch',S=>S['delivery.c0']],
+ ['Critical','Cancelled after payment',S=>S['store_cancel.n']],
+ ['Critical','Refund status not visible',S=>S['refund.n']],
+ ['High','Split shipments',S=>S['delivery.c3']+S['missing_wrong.c0']],
+ ['High','Staff unreachable',S=>S['no_response.n']],
+ ['High','OTP and login failures',S=>S['account_app.n']],
+ ['Medium','Promo code failures',S=>S['promo.n']],
+ ['Medium','Marked delivered, not received',S=>S['delivery.c4']],
+ ['Medium','Payment failures',S=>S['payment.n']],
+ ['Medium','Damaged or defective',S=>S['quality.n']],
+ ['Acceptable','Wrong size or colour sent',S=>S['missing_wrong.c1']],
+ ['Acceptable','Chatbot not helpful',S=>S['bot_unhelpful.n']],
+ ['Acceptable','Suspected fakes',S=>S['quality.c2']]];
+const TC={Critical:'var(--hot)',High:'var(--warn)',Medium:'var(--accent)',Acceptable:'var(--muted)'};
+function overlaps(a,b){return DAYS[R0].d<=b&&DAYS[R1].d>=a;}
+function renderPriority(S){
+  const c0=S['delivery.c0'],dn=S['delivery.n'];
+  $('ff-lead').innerHTML=`<b>${fmt(c0)} messages</b> in this time frame are about orders that were paid but had not left the warehouse: ${pct(dn?c0/dn:0,0)} of late-delivery complaints and ${pct(S.hard?c0/S.hard:0,0)} of all complaints.${overlaps('2026-07-04','2026-07-16')?' The complaint rate doubled during the July sale.':''}`;
+  const nx=[[2,'Order cancelled after payment',`${fmt(S['store_cancel.n'])} messages, plus ${fmt(S['refund.c1'])} refund messages it caused. Reserve stock at payment and name the item, reason and refund date in the notice.`,'hot'],
+    [3,'Refund status not visible',`${fmt(S['refund.n'])} messages. Show refund status on the order page and in the bot, and confirm when a refund is sent.`,'hot'],
+    [4,'Split shipments look like missing items',`${fmt(S['delivery.c3']+S['missing_wrong.c0'])} messages. Tell customers how many parcels to expect.`,'warn']];
+  $('ff-next').innerHTML=nx.map(x=>`<div class="nx"><span class="n" style="background:var(--${x[3]}-soft);color:var(--${x[3]})">${x[0]}</span><div><b>${x[1]}</b><p>${x[2]}</p></div></div>`).join('');
+  const groups=['Critical','High','Medium','Acceptable'];
+  $('ff-tiers').innerHTML=groups.map(g=>`<div class="tier" style="--tc:${TC[g]}"><h3>${g==='Acceptable'?'Acceptable, monitor':g}</h3><ol>${PRIO.map((p,i)=>[p,i]).filter(([p])=>p[0]===g).map(([p,i])=>`<li><span>${i+1}. ${p[1]}</span><span>${fmt(p[2](S))}</span></li>`).join('')}</ol></div>`).join('');
+  const big=PRIO.map(p=>[p[1],p[2](S)]).sort((a,b)=>b[1]-a[1])[0];
+  $('ff-note').textContent=big&&big[1]?`Largest issue in this time frame: ${big[0].toLowerCase()} (${fmt(big[1])} messages).`:'No complaint messages in this time frame.';
+}
+
+// ---------- scenario table + deep dive ----------
+const ddOpen=new Set(['delivery']);
+function renderTable(S,cats){
+  const tb=document.querySelector('#tbl tbody');const maxN=Math.max(1,...cats.map(c=>c.n));
+  const lvl=(x,hi,md)=> x>=hi?'hi':x>=md?'md':'lo';
+  tb.innerHTML=cats.map(c=>{const d=DD[c.k];const cs=d.causes.map((x,i)=>({x,n:S[`${c.k}.c${i}`]||0})).sort((a,b)=>b.n-a.n);const tot=cs.reduce((a,y)=>a+y.n,0);const open=ddOpen.has(c.k);
+    return `<tr>
+      <td class="scn">${esc(c.label)}<small>${esc(tot?cs[0].x[0]:'No messages in this time frame')}</small></td>
+      <td><div class="barcell"><div class="bar" style="flex:0 0 auto;width:${Math.max(2,c.n/maxN*160)}px"></div><span class="num">${fmt(c.n)}</span></div></td>
+      <td class="r num">${fmt(c.sess)}</td>
+      <td class="r"><span class="pill ${lvl(c.neg,.15,.08)}">${c.n?pct(c.neg,0):'·'}</span></td>
+      <td class="r"><span class="pill ${lvl(c.referred,.5,.3)}">${c.n?pct(c.referred,0):'·'}</span></td>
+      <td><span class="tierpill ${d.tier}">${d.tier}</span></td>
+      <td><button type="button" class="ddbtn" id="ddb-${c.k}" data-k="${c.k}" aria-expanded="${open}" aria-controls="dd-${c.k}">Deep dive</button></td></tr>
+    <tr class="dd" id="dd-${c.k}" ${open?'':'hidden'}><td colspan="7"><div class="ddwrap">
+      <div class="ddsum">
+        <div><span class="k">The real issue</span>${esc(d.real)}</div>
+        <div><span class="k">Fix</span>${esc(d.fix)}</div>
+        <div><span class="k">Owner</span>${esc(d.owner)}<span class="k" style="margin-top:6px">Priority</span><span><span class="tierpill ${d.tier}">${d.tier}</span></span></div>
+      </div>
+      ${cs.map(({x,n})=>`<div class="cause" style="${n?'':'opacity:.55'}">
+        <div class="says"><span class="lbl">Customer writes (example)</span><span class="th" lang="${/[฀-๿]/.test(x[2])?'th':'en'}">“${esc(x[2])}”</span>${x[3]&&x[3]!==x[2]?`<span class="en">${esc(x[3])}</span>`:''}</div>
+        <div class="real"><span class="lbl">Real issue</span><b>${esc(x[0])}</b><span class="sh"><i style="width:${tot?Math.max(3,n/tot*160):3}px"></i>${fmt(n)} messages · ${tot?pct(n/tot,0):'0%'} of this scenario</span></div>
+      </div>`).join('')}
+    </div></td></tr>`;}).join('');
+  const causeTot=HARD.reduce((a,k)=>a+DD[k].causes.reduce((s,x,i)=>s+(S[`${k}.c${i}`]||0),0),0), catTot=HARD.reduce((a,k)=>a+S[k+'.n'],0);
+  $('tbl-note').textContent=causeTot<catTot*0.97?'Some messages in this time frame come from a loaded export; they count in the scenario totals but not in the deep-dive causes.':'';
+  syncDDAll();
+}
+document.querySelector('#tbl tbody').addEventListener('click',e=>{const b=e.target.closest('.ddbtn');if(!b)return;const k=b.dataset.k;const open=!ddOpen.has(k);open?ddOpen.add(k):ddOpen.delete(k);b.setAttribute('aria-expanded',open);$('dd-'+k).hidden=!open;syncDDAll();});
+function syncDDAll(){$('dd-all').textContent=ddOpen.size===HARD.length?'Close all deep dives':'Open all deep dives';}
+$('dd-all').addEventListener('click',()=>{const openAll=ddOpen.size!==HARD.length;HARD.forEach(k=>openAll?ddOpen.add(k):ddOpen.delete(k));document.querySelectorAll('.ddbtn').forEach(b=>{b.setAttribute('aria-expanded',openAll);$('dd-'+b.dataset.k).hidden=!openAll;});syncDDAll();});
+
+// ---------- trend ----------
+function renderTrend(S){
+  const n=R1-R0+1, mode=n<=45?'day':'week';const bs=buckets(mode);
+  $('trend-title').textContent=`Complaints per ${mode}, and their share of all messages`;
+  // bars
+  let host=$('c-weekly');host.innerHTML='';
+  let W=900,H=200,m={l:44,r:8,t:16,b:24};let svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':`Complaint messages per ${mode}`},host);
+  let iw=W-m.l-m.r,ih=H-m.t-m.b,bw=iw/Math.max(1,bs.length);const ymax=niceMax(Math.max(1,...bs.map(b=>b.hard)));
+  for(let i=0;i<=4;i++){const v=ymax*i/4,y=m.t+ih-ih*v/ymax;el('line',{x1:m.l,x2:W-m.r,y1:y,y2:y,class:i?'gl':'ax'},svg);const t=el('text',{x:m.l-6,y:y+3.5,'text-anchor':'end'},svg);t.textContent=fmt(v);}
+  const step=Math.max(1,Math.ceil(bs.length/10));let tip=tipFor(host);const imx=bs.reduce((a,b,i)=>b.hard>bs[a].hard?i:a,0);
+  bs.forEach((b,i)=>{const h=ih*b.hard/ymax,x=m.l+i*bw+bw*.18,w=Math.max(1,bw*.64),y=m.t+ih-h;
+    el('path',{d:rr(x,y,w,h,Math.min(4,w/2)),fill:'var(--s1)','fill-opacity':b.full?1:.45},svg);
+    if(i===imx&&b.hard){const t=el('text',{x:x+w/2,y:y-5,'text-anchor':'middle',style:'fill:var(--ink)'},svg);t.textContent=fmt(b.hard);}
+    if(i%step===0){const t=el('text',{x:x+w/2,y:H-6,'text-anchor':'middle'},svg);t.textContent=bLabel(b,mode,false);}
+    const hit=el('rect',{x:m.l+i*bw,y:m.t,width:bw,height:ih,fill:'transparent'},svg);
+    hit.addEventListener('mousemove',()=>{const [px,py]=wrapPos(host,svg,x+w/2,y);tip.show(`${bLabel(b,mode,true)}${b.full?'':' (partial)'}<br><b>${fmt(b.hard)}</b> complaints of ${fmt(b.n)} messages`,px,py)});
+    hit.addEventListener('mouseleave',tip.hide);});
+  // rate line
+  host=$('c-rate');host.innerHTML='';H=150;m={l:44,r:8,t:14,b:24};ih=H-m.t-m.b;
+  svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':`Complaint share of messages per ${mode}`},host);
+  const r=bs.map(b=>b.n?b.hard/b.n:0);const rmax=Math.max(.05,Math.ceil(Math.max(...r)*20)/20);
+  for(let i=0;i<=2;i++){const v=rmax*i/2,y=m.t+ih-ih*v/rmax;el('line',{x1:m.l,x2:W-m.r,y1:y,y2:y,class:i?'gl':'ax'},svg);const t=el('text',{x:m.l-6,y:y+3.5,'text-anchor':'end'},svg);t.textContent=Math.round(v*100)+'%';}
+  const pts=r.map((v,i)=>[m.l+i*bw+bw/2,m.t+ih-ih*v/rmax]);
+  if(pts.length>1){el('path',{d:'M'+pts.map(p=>p.join(',')).join('L')+`L${pts[pts.length-1][0]},${m.t+ih}L${pts[0][0]},${m.t+ih}Z`,fill:'var(--hot)','fill-opacity':.1},svg);
+    el('path',{d:'M'+pts.map(p=>p.join(',')).join('L'),fill:'none',stroke:'var(--hot)','stroke-width':2,'stroke-linejoin':'round'},svg);}
+  const avg=S.n?S.hard/S.n:0,ay=m.t+ih-ih*avg/rmax;
+  el('line',{x1:m.l,x2:W-m.r,y1:ay,y2:ay,stroke:'var(--faint)','stroke-dasharray':'4 4'},svg);
+  const at=el('text',{x:W-m.r,y:9,'text-anchor':'end'},svg);at.textContent='dashed line: time frame average '+pct(avg);
+  const ir=r.indexOf(Math.max(...r));
+  el('circle',{cx:pts[ir][0],cy:pts[ir][1],r:4.5,fill:'var(--hot)',stroke:'var(--surface)','stroke-width':2},svg);
+  const pt=el('text',{x:Math.min(pts[ir][0]+8,W-50),y:pts[ir][1]+4,style:'fill:var(--ink)'},svg);pt.textContent=pct(r[ir]);
+  bs.forEach((b,i)=>{if(i%step===0){const t=el('text',{x:pts[i][0],y:H-6,'text-anchor':'middle'},svg);t.textContent=bLabel(b,mode,false);}});
+  tip=tipFor(host);const dot=el('circle',{r:4,fill:'var(--hot)',stroke:'var(--surface)','stroke-width':2,opacity:0},svg);
+  const hit=el('rect',{x:m.l,y:m.t,width:iw,height:ih,fill:'transparent'},svg);
+  hit.addEventListener('mousemove',e=>{const bb=svg.getBoundingClientRect();const vx=(e.clientX-bb.left)*W/bb.width;const i=Math.max(0,Math.min(bs.length-1,Math.floor((vx-m.l)/bw)));dot.setAttribute('cx',pts[i][0]);dot.setAttribute('cy',pts[i][1]);dot.setAttribute('opacity',1);const [px,py]=wrapPos(host,svg,pts[i][0],pts[i][1]);tip.show(`${bLabel(bs[i],mode,true)}<br><b>${pct(r[i])}</b> of messages were complaints`,px,py)});
+  hit.addEventListener('mouseleave',()=>{tip.hide();dot.setAttribute('opacity',0)});
+  $('trend-desc').textContent=S.hard?`The complaint share peaked at ${pct(r[ir])} ${mode==='week'?'in the week of '+fshort(bs[ir].key):'on '+fdate(bs[ir].key)}. The time frame average is ${pct(avg)}.`:'No complaints in this time frame.';
+  $('trend-note').textContent=mode==='week'&&bs.some(b=>!b.full)?'Lighter bars are partial weeks at the edges of the time frame.':'';
+}
+
+// ---------- mix ----------
+function renderMix(S){
+  const n=R1-R0+1, mode=n>62?'month':n>14?'week':'day';const bs=buckets(mode);
+  $('mix-title').textContent=`Which problems drive each ${mode}`;
+  const series=[['delivery','Late delivery','var(--s1)'],['store_cancel','Cancelled by store','var(--s2)'],['missing_wrong','Missing / wrong item','var(--s3)'],['refund','Refund slow','var(--s4)'],['other','All other scenarios','var(--s5)']];
+  $('l-month').innerHTML=series.map(s=>`<span><i style="background:${s[2]}"></i>${s[1]}</span>`).join('');
+  const host=$('c-month');host.innerHTML='';const W=560,H=260,m={l:44,r:8,t:16,b:24};
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':`Complaint mix by ${mode}`},host);
+  const data=bs.map(b=>{const o={b};let main=0;series.slice(0,4).forEach(s=>{o[s[0]]=b[s[0]+'.n'];main+=o[s[0]];});o.total=HARD.reduce((a,k)=>a+b[k+'.n'],0);o.other=o.total-main;return o;});
+  const ymax=niceMax(Math.max(1,...data.map(d=>d.total))),iw=W-m.l-m.r,ih=H-m.t-m.b,bw=iw/Math.max(1,data.length);
+  for(let i=0;i<=4;i++){const v=ymax*i/4,y=m.t+ih-ih*v/ymax;el('line',{x1:m.l,x2:W-m.r,y1:y,y2:y,class:i?'gl':'ax'},svg);const t=el('text',{x:m.l-6,y:y+3.5,'text-anchor':'end'},svg);t.textContent=fmt(v);}
+  const tip=tipFor(host);const step=Math.max(1,Math.ceil(data.length/7));
+  data.forEach((d,i)=>{const x=m.l+i*bw+bw*.2,w=Math.max(1,bw*.6);let y=m.t+ih;
+    series.forEach((s,j)=>{const h=ih*d[s[0]]/ymax;y-=h;if(h<=0)return;const top=j===series.length-1||series.slice(j+1).every(z=>!d[z[0]]);
+      el(top?'path':'rect',top?{d:rr(x,y,w,Math.max(0,h-(h>3?2:0)),Math.min(4,w/2)),fill:s[2],transform:`translate(0,${h>3?2:0})`}:{x,y,width:w,height:Math.max(0,h-(h>3?2:0)),fill:s[2],transform:`translate(0,${h>3?2:0})`},svg);});
+    if(i%step===0){const t=el('text',{x:x+w/2,y:H-6,'text-anchor':'middle'},svg);t.textContent=bLabel(d.b,mode,false);}
+    if(data.length<=12){const tt=el('text',{x:x+w/2,y:y-4,'text-anchor':'middle',style:'fill:var(--ink)'},svg);tt.textContent=fmt(d.total);}
+    const hit=el('rect',{x:m.l+i*bw,y:m.t,width:bw,height:ih,fill:'transparent'},svg);
+    hit.addEventListener('mousemove',()=>{const [px,py]=wrapPos(host,svg,x+w/2,y);tip.show(`<b>${bLabel(d.b,mode,true)}</b><br>`+series.map(s=>`${s[1]}: <b>${fmt(d[s[0]])}</b>`).join('<br>'),px,py)});
+    hit.addEventListener('mouseleave',tip.hide);});
+  const top=HARD.map(k=>[k,S[k+'.n']]).sort((a,b)=>b[1]-a[1]).slice(0,2);
+  $('mix-desc').textContent=S.hard?`Complaint messages per ${mode}, split by scenario. In this time frame ${LABEL[top[0][0]].toLowerCase()} and ${LABEL[top[1][0]].toLowerCase()} lead.`:'';
+  $('mix-note').textContent=bs.some(b=>!b.full)&&mode!=='day'?`Partial ${mode}s at the edges of the time frame are included.`:'';
+}
+
+// ---------- hours ----------
+function renderHours(S){
+  const host=$('c-hour');host.innerHTML='';const W=420,H=230,m={l:36,r:6,t:16,b:24};
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'Complaints by hour of day'},host);
+  const data=Array.from({length:24},(_,i)=>S['h'+i]),mx=Math.max(...data),ymax=niceMax(Math.max(1,mx)),iw=W-m.l-m.r,ih=H-m.t-m.b,bw=iw/24;
+  for(let i=0;i<=4;i++){const v=ymax*i/4,y=m.t+ih-ih*v/ymax;el('line',{x1:m.l,x2:W-m.r,y1:y,y2:y,class:i?'gl':'ax'},svg);const t=el('text',{x:m.l-5,y:y+3.5,'text-anchor':'end'},svg);t.textContent=fmt(v);}
+  const tip=tipFor(host);const ip=data.indexOf(mx);
+  data.forEach((v,i)=>{const h=ih*v/ymax,x=m.l+i*bw+bw*.15,w=bw*.7,y=m.t+ih-h;
+    el('path',{d:rr(x,y,w,h,3),fill:i===ip&&mx?'var(--hot)':'var(--s1)'},svg);
+    if(i%3===0){const t=el('text',{x:x+w/2,y:H-6,'text-anchor':'middle'},svg);t.textContent=String(i).padStart(2,'0');}
+    const hit=el('rect',{x:m.l+i*bw,y:m.t,width:bw,height:ih,fill:'transparent'},svg);
+    hit.addEventListener('mousemove',()=>{const [px,py]=wrapPos(host,svg,x+w/2,y);tip.show(`${String(i).padStart(2,'0')}:00 to ${String(i).padStart(2,'0')}:59<br><b>${fmt(v)}</b> complaints`,px,py)});
+    hit.addEventListener('mouseleave',tip.hide);});
+  if(mx){const t=el('text',{x:Math.min(Math.max(m.l+ip*bw+bw/2,60),W-40),y:m.t+ih-ih*mx/ymax-5,'text-anchor':'middle',style:'fill:var(--ink)'},svg);t.textContent=`peak ${String(ip).padStart(2,'0')}:00`;}
+  const busy=data.map((v,i)=>[i,v]).filter(x=>x[1]>=mx*0.7).map(x=>x[0]);
+  $('hour-desc').textContent=mx?`Busiest hour is ${String(ip).padStart(2,'0')}:00. Complaints stay near the peak from ${String(Math.min(...busy)).padStart(2,'0')}:00 to ${String(Math.max(...busy)).padStart(2,'0')}:59.`:'No complaints in this time frame.';
+}
+
+// ---------- bot & friction ----------
+function renderBot(S){
+  const th=S.hsess?S.hmsgs/S.hsess:0,oc=S.sess-S.hsess,to=oc?S.omsgs/oc:0,mxv=Math.max(8,th,to);
+  $('cmp').innerHTML=`<div class="eyebrow">Average messages per chat</div>`+[['Complaint chats',th,'var(--hot)'],['Other chats',to,'var(--s5)']].map(r=>`<div class="cmp-row"><span>${r[0]}</span><div class="track"><div class="fill" style="width:${r[1]/mxv*100}%;background:${r[2]}"></div></div><b>${r[1].toFixed(1)}</b></div>`).join('');
+  $('botstats').innerHTML=[[pct(S.hard?S.refh/S.hard:0,0),'of replies to complaints point to the call center, a form or staff'],[fmt(S.track3),'chats checked order status 3 or more times'],[fmt(S.notfound),'order lookups where the bot could not find the order'],[fmt(S.slow),'bot replies took longer than 15 seconds']].map(s=>`<div class="stat"><span class="v">${s[0]}</span><span class="l">${s[1]}</span></div>`).join('');
+}
+function renderSoft(S){
+  const rows=SOFTK.map(k=>({k,n:S[k+'.n'],r:S[k+'.n']?S[k+'.r']/S[k+'.n']:0})).sort((a,b)=>b.n-a.n);const smax=Math.max(1,...rows.map(r=>r.n));
+  $('soft').innerHTML=rows.map(s=>`<div class="cmp-row" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 52px"><span>${LABEL[s.k]}</span><div class="track"><div class="fill" style="width:${s.n/smax*100}%;background:var(--s1)"></div></div><b>${fmt(s.n)}</b></div>`).join('');
+  const cr=rows.find(r=>r.k==='cancel_req'),rx=rows.find(r=>r.k==='return_exch');
+  $('soft-note').textContent=`The bot sends ${pct(cr.r,0)} of cancel requests and ${pct(rx.r,0)} of return requests to a form or the call center instead of completing them in chat.`;
+}
+
+// ---------- voice ----------
+const QL={all:'All',delivery:'Late delivery',missing_wrong:'Missing / wrong',store_cancel:'Cancelled by store',refund:'Refund',quality:'Damaged',promo:'Promo code',payment:'Payment',account_app:'OTP / login',no_response:'No reply',bot_unhelpful:'Bot unhelpful',threat:'Threat to leave'};
+let qcur='all',VOICE=[];
+function renderVoice(){
+  const a=DAYS[R0].d,b=DAYS[R1].d;
+  const cur=QUOTES.filter(q=>q.d>=a&&q.d<=b).map(q=>({...q,src:'c'}));
+  const extra=[];for(let i=R1;i>=R0&&extra.length<40;i--){(QUEUE[DAYS[i].d]||[]).forEach(x=>{const k=x[3].includes('threat')?'threat':(x[3].find(t=>HARD.includes(t))||'delivery');extra.push({k,th:x[4],en:'',d:DAYS[i].d,src:'q'});});}
+  VOICE=cur.concat(extra.slice(0,Math.max(0,12-cur.length)));
+  $('voice-desc').textContent=VOICE.length?`${cur.length?`${cur.length} translated example${cur.length>1?'s':''} plus `:''}recent high-risk messages from this time frame. Order numbers and personal details removed.`:'No complaint messages to show in this time frame.';
+  const keys=['all',...new Set(VOICE.map(q=>q.k))];if(!keys.includes(qcur))qcur='all';
+  $('qf').innerHTML=keys.map(k=>`<button type="button" id="qf-${k}" data-k="${k}" aria-pressed="${k===qcur}">${QL[k]||k}</button>`).join('');
+  $('quotes').innerHTML=VOICE.filter(q=>qcur==='all'||q.k===qcur).map(q=>`<figure class="quote ${q.k==='threat'?'threat':''}" style="margin:0"><span class="tag">${QL[q.k]||q.k} · ${fshort(q.d)}</span><blockquote class="th" style="margin:0" lang="${/[฀-๿]/.test(q.th)?'th':'en'}">“${esc(q.th)}”</blockquote>${q.en?`<figcaption class="en">${esc(q.en)}</figcaption>`:''}</figure>`).join('');
+}
+$('qf').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;qcur=b.dataset.k;renderVoice();document.getElementById('qf-'+qcur)?.focus();});
+
+// ---------- daily watch ----------
+const SNAME={delivery:'Late or not received delivery',store_cancel:'Order cancelled by store',missing_wrong:'Missing or wrong items',refund:'Refund not received / slow',account_app:'OTP, login or app problems',no_response:'Staff unreachable / no reply',promo:'Promo code or price',payment:'Payment failed',quality:'Damaged or defective',bot_unhelpful:'Chatbot not helpful',threat:'Escalation threats'};
+const SHORT={delivery:'late delivery',store_cancel:'cancelled by store',missing_wrong:'missing item',refund:'refund',account_app:'OTP / login',no_response:'no reply',promo:'promo code',payment:'payment',quality:'defect',bot_unhelpful:'bot unhelpful',threat:'threat',angry:'angry'};
+const ACT={delivery:['Warehouse & logistics','Check the dispatch backlog and courier pickups. Send a delay message with a new date to orders past the dispatch target.'],store_cancel:['E-commerce & inventory','Find the oversold items and fix the stock sync. Send each customer the item, reason and refund date.'],missing_wrong:['Warehouse & CRM','Check if split parcels went out without a notice, and look for picking errors in the day\'s shipments.'],refund:['Finance','Check the refund batch and any failed transfers. Reply to waiting customers with an expected date.'],account_app:['IT & app team','Check the SMS OTP gateway and login errors. Post a notice if there is an outage.'],no_response:['Customer service lead','Clear the LINE, email and call-back queue. Move agents to chat if needed.'],promo:['Marketing & e-commerce','Test the codes running that day against their rules and fix any that fail.'],payment:['Payments & IT','Check payment gateway errors by method and any orders charged but not created.'],quality:['Quality control','Look for a batch or brand with repeated defects and contact the customers.'],bot_unhelpful:['Chatbot team','Read the failed chats and fix the answers that missed.'],threat:['Customer service lead','Call back every customer who threatened to escalate, the same day.']};
+const V=(r,key)=>key in r?r[key]:(r[key+'.n']||0);
+function baseline(i,key){const prev=DAYS.slice(Math.max(0,i-7),i);if(prev.length<3)return null;return prev.reduce((a,r)=>a+(key==='rate'?(r.n?r.hard/r.n:0):V(r,key)),0)/prev.length;}
+function statusOf(i,key){const t=V(DAYS[i],key);if(key==='threat')return t>=3?'alert':t>=1?'watch':'ok';const b=baseline(i,key);if(b===null)return 'ok';const base=Math.max(b,0.5);if(t>=1.5*base&&t-base>=8)return 'alert';if(t>=1.3*base&&t-base>=4)return 'watch';return 'ok';}
+function dayState(i){const s=HARD.map(k=>statusOf(i,k));return s.includes('alert')?'alert':s.includes('watch')?'watch':'ok';}
+const STV={alert:'var(--hot)',watch:'var(--warn)',ok:'var(--good)'},STS={alert:'var(--hot-soft)',watch:'var(--warn-soft)',ok:'var(--good-soft)'},STL={alert:'Alert',watch:'Watch',ok:'Normal'};
+function spark(i,key){const from=Math.max(0,i-13),vals=DAYS.slice(from,i+1).map(r=>V(r,key));const W=120,H=28,mx=Math.max(1,...vals),bw=W/14;return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Last 14 days">`+vals.map((v,j)=>{const h=Math.max(1,(H-2)*v/mx),last=j===vals.length-1;return `<rect x="${(14-vals.length+j)*bw+1}" y="${H-h}" width="${bw-2}" height="${h}" rx="1.5" fill="${last?'var(--ink)':'var(--s5)'}"><title>${DAYS[from+j].d}: ${v}</title></rect>`;}).join('')+`</svg>`;}
+function deltaTxt(t,b){if(b===null)return 'not enough history';if(b<0.5)return t?`new (avg ${b.toFixed(1)})`:'none';const p=(t-b)/b;return `${p>=0?'+':''}${Math.round(p*100)}% vs 7-day avg ${b.toFixed(b<10?1:0)}`;}
+function prevPeriod(){const n=R1-R0+1;const p1=R0-1,p0=Math.max(0,R0-n);if(p1<0)return null;return {a:p0,b:p1,days:p1-p0+1,n};}
+function sumKey(a,b,key){let t=0;for(let i=a;i<=b;i++)t+=V(DAYS[i],key);return t;}
+function spikeDays(key){let c=0;for(let i=R0;i<=R1;i++)if(statusOf(i,key)==='alert')c++;return c;}
+function periodStatus(key,cur,prev,sp){const n=R1-R0+1,spA=n<=7?1:Math.ceil(n/10);
+  if(key==='threat'){if(prev!==null&&cur>=1.5*Math.max(prev,0.5)&&cur-prev>=3)return 'alert';return cur>=1?'watch':'ok';}
+  const up=prev!==null&&cur>=1.5*Math.max(prev,0.5)&&cur-prev>=8, mid=prev!==null&&cur>=1.2*Math.max(prev,0.5)&&cur-prev>=4;
+  if(up||sp>=spA)return 'alert';if(mid||sp>=1)return 'watch';return 'ok';}
+function chg(cur,prev){if(prev===null)return 'no earlier data';if(prev<0.5)return cur?'new':'none before';const p=(cur-prev)/prev;return `${p>=0?'+':''}${Math.round(p*100)}% vs previous period`;}
+function sparkRange(key){const n=R1-R0+1,W=140,H=28,bw=W/n;const vals=[];for(let i=R0;i<=R1;i++)vals.push([i,V(DAYS[i],key)]);const mx=Math.max(1,...vals.map(v=>v[1]));
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Daily trend in the time frame">`+vals.map(([i,v],j)=>{const h=Math.max(1,(H-2)*v/mx);const hot=key!=='threat'&&statusOf(i,key)==='alert';return `<rect x="${j*bw+(bw>3?0.5:0)}" y="${H-h}" width="${Math.max(0.6,bw-(bw>3?1:0.2))}" height="${h}" fill="${hot?'var(--hot)':'var(--s5)'}"><title>${DAYS[i].d}: ${v}</title></rect>`;}).join('')+`</svg>`;}
+let qAll=false;
+function renderWatch(){
+  const n=R1-R0+1,pp=prevPeriod();
+  const scale=pp?n/pp.days:1;
+  const prevOf=key=>pp?sumKey(pp.a,pp.b,key)*scale:null;
+  $('w-date').textContent=`${fdate(DAYS[R0].d)}${n>1?' to '+fdate(DAYS[R1].d):''}`;
+  $('w-sub').textContent=pp?`Compared with ${pp.days===1?`the previous day (${fshort(DAYS[pp.a].d)})`:`the ${pp.days===n?'previous':'available earlier'} ${pp.days} days (${fshort(DAYS[pp.a].d)} to ${fshort(DAYS[pp.b].d)})`}${pp.days<n?', scaled to the same length':''}. A spike day is a day when a scenario jumped well above its 7-day average.`:'There is no earlier data to compare with. Spike days still show days when a scenario jumped above its 7-day average.';
+  const keys=[...HARD,'threat'];
+  const st=keys.map(k=>{const cur=sumKey(R0,R1,k),prev=prevOf(k),sp=k==='threat'?0:spikeDays(k);return {k,cur,prev,sp,s:periodStatus(k,cur,prev,sp)};});
+  const nA=st.filter(x=>x.s==='alert').length,nW=st.filter(x=>x.s==='watch').length,worst=nA?'alert':nW?'watch':'ok';
+  const spikeTotal=(()=>{let c=0;for(let i=R0;i<=R1;i++)if(dayState(i)==='alert')c++;return c;})();
+  $('watch').style.setProperty('--wstate',STV[worst]);const ban=$('w-banner');ban.style.setProperty('--bstate',STV[worst]);ban.style.setProperty('--bstate-soft',STS[worst]);
+  const an=st.filter(x=>x.s==='alert').map(x=>SNAME[x.k].toLowerCase());
+  ban.innerHTML=nA?`<b>${nA} scenario${nA>1?'s need':' needs'} action</b><span>${esc(an.slice(0,4).join(', '))}${an.length>4?` and ${an.length-4} more`:''}${nW?` · ${nW} on watch`:''} · ${spikeTotal} spike day${spikeTotal!==1?'s':''} in this time frame</span>`:nW?`<b>${nW} scenario${nW>1?'s':''} on watch</b><span>Rising or with a spike day, but below the alert line · ${spikeTotal} spike day${spikeTotal!==1?'s':''}</span>`:`<b>All normal</b><span>No scenario rose sharply or spiked in this time frame.</span>`;
+  const S=sumRange(R0,R1),P=pp?sumRange(pp.a,pp.b):null;
+  const pv=k=>P?P[k]*scale:null;
+  const rate=S.n?S.hard/S.n:0,prate=P&&P.n?P.hard/P.n:null;
+  const tl=(v,l,t,b,isRate)=>{let d='',cls='';if(b!==null&&b!==undefined){const diff=isRate?(t-b)*100:(b>0?(t-b)/b*100:0);cls=diff>10?'up':diff<-10?'down':'';d=isRate?`${diff>=0?'+':''}${diff.toFixed(1)} pts vs previous period`:`${diff>=0?'+':''}${Math.round(diff)}% vs previous period`;}return `<div class="tile"><span class="v">${v}</span><span class="l">${l}</span><span class="d ${cls}">${d}</span></div>`;};
+  $('w-tiles').innerHTML=tl(fmt(S.hard),'complaint messages',S.hard,pv('hard'),false)+tl(pct(rate),'of messages are complaints',rate,prate,true)+tl(fmt(S.neg),'angry messages',S.neg,pv('neg'),false)+tl(fmt(S.threat),'threats to escalate',S.threat,pv('threat'),false)+tl(fmt(S['want_human.n']),'asked for a human',S['want_human.n'],pv('want_human.n'),false);
+  const order={alert:0,watch:1,ok:2};st.sort((a,b)=>order[a.s]-order[b.s]||b.cur-a.cur);
+  document.querySelector('#w-alerts tbody').innerHTML=st.map(x=>{const a=ACT[x.k];return `<tr class="is-${x.s}"><td><span class="st ${x.s}">${STL[x.s]}</span></td><td class="scn">${SNAME[x.k]}<small>${x.k==='threat'?'every threat needs a call-back':chg(x.cur,x.prev)}</small></td><td class="r num"><b>${fmt(x.cur)}</b></td><td class="r num">${x.prev===null?'·':fmt(x.prev)}</td><td class="r num">${x.k==='threat'?'·':x.sp?`<b style="color:var(--hot)">${x.sp}</b>`:'0'}</td><td>${sparkRange(x.k)}</td><td class="act">${x.s==='ok'?`<b>${a[0]}</b>`:`<b>${a[0]}:</b> ${a[1]}`}</td></tr>`;}).join('');
+  // follow-up queue across the time frame
+  const items=[];for(let i=R0;i<=R1;i++)(QUEUE[DAYS[i].d]||[]).forEach(x=>items.push([DAYS[i].d,...x]));
+  items.sort((a,b)=>b[3]-a[3]||(a[0]<b[0]?1:a[0]>b[0]?-1:(a[1]<b[1]?1:-1)));
+  const show=qAll?items:items.slice(0,12);
+  $('q-count').textContent=items.length?`${items.length} high-risk message${items.length>1?'s':''} in this time frame`:'';
+  $('w-queue').innerHTML=show.length?show.map(x=>{const tags=x[4];const c=tags.includes('threat')?'var(--hot)':tags.includes('no_response')?'var(--warn)':'var(--accent)';return `<div class="qi" style="--qc:${c}"><div class="meta2"><span>${fshort(x[0])} ${esc(x[1])}</span><span>session ${esc(x[2])}</span>${tags.map(t=>`<span class="tag ${t==='threat'?'threat':t==='angry'?'angry':''}">${SHORT[t]||t}</span>`).join('')}</div><p lang="th">${esc(x[5])}</p></div>`;}).join(''):`<div class="empty">No high-risk messages in this time frame.</div>`;
+  const more=$('q-more');more.hidden=items.length<=12;more.textContent=qAll?'Show top 12 only':`Show all ${items.length}`;
+  renderStrip();renderRecent();
+}
+$('q-more').addEventListener('click',()=>{qAll=!qAll;renderWatch();});
+function renderStrip(){
+  const host=$('w-strip');host.innerHTML='';const n=R1-R0+1;
+  $('strip-title').textContent=`Complaints per day across the ${n} day${n>1?'s':''}`;
+  const W=Math.max(900,n*12),H=120,m={l:36,r:6,t:8,b:20},iw=W-m.l-m.r,ih=H-m.t-m.b,bw=iw/n;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'Complaint messages per day in the time frame'},host);
+  svg.style.minWidth=Math.min(W,1600)+'px';
+  const data=DAYS.slice(R0,R1+1);const ymax=niceMax(Math.max(10,...data.map(r=>r.hard)));
+  for(let i=0;i<=2;i++){const v=ymax*i/2,y=m.t+ih-ih*v/ymax;el('line',{x1:m.l,x2:W-m.r,y1:y,y2:y,class:i?'gl':'ax'},svg);const t=el('text',{x:m.l-5,y:y+3.5,'text-anchor':'end'},svg);t.textContent=fmt(v);}
+  const tip=tipFor(host);const step=Math.max(1,Math.ceil(n/12));
+  data.forEach((r,j)=>{const i=R0+j,s=dayState(i),h=Math.max(1,ih*r.hard/ymax),x=m.l+j*bw+bw*.15,w=Math.max(1,bw*.7),y=m.t+ih-h;
+    el('path',{d:rr(x,y,w,h,Math.min(3,w/2)),fill:s==='alert'?'var(--hot)':s==='watch'?'var(--warn)':'var(--s5)'},svg);
+    if(j%step===0){const t=el('text',{x:x+w/2,y:H-3,'text-anchor':'middle'},svg);t.textContent=fshort(r.d);}
+    const hit=el('rect',{x:m.l+j*bw,y:m.t,width:bw,height:ih,fill:'transparent',style:n>1?'cursor:pointer':''},svg);
+    hit.addEventListener('mousemove',()=>{const [px,py]=wrapPos(host,svg,x+w/2,y);tip.show(`${fdate(r.d)}<br><b>${fmt(r.hard)}</b> complaints · ${s==='alert'?'spike day':STL[s]}${n>1?'<br>click to look at this day only':''}`,px,py)});
+    hit.addEventListener('mouseleave',tip.hide);if(n>1)hit.addEventListener('click',()=>setRange(r.d,r.d));});
+}
+function renderRecent(){const out=[];for(let i=R1;i>=R0&&out.length<10;i--){if(dayState(i)==='alert')out.push(i);}
+  $('w-recent').innerHTML=out.length?`<span class="note" style="margin-right:4px">Spike days (click to look at one day):</span>`+out.map(i=>`<button type="button" class="alert" data-d="${DAYS[i].d}">${fshort(DAYS[i].d)}</button>`).join(''):`<span class="note">No spike days in this time frame.</span>`;}
+$('w-recent').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;setRange(b.dataset.d,b.dataset.d);});
+
+// ---------- render all ----------
+function renderAll(){
+  const S=sumRange(R0,R1);const cats=catStats(S);
+  renderFilter(S);renderWatch();renderPriority(S);renderKPIs(S);renderFindings(S,cats);renderTable(S,cats);renderTrend(S);renderMix(S);renderHours(S);renderBot(S);renderSoft(S);renderVoice();
+}
+
+
+// ================= DATA LOADING (Google Sheet → engine → dashboard) =================
+const CACHE_KEY='radar-cache-v1';
+let SOURCE={label:'',at:null,rows:0};
+function toDays(out){return out.rows.map(a=>{const o={d:a[0]};out.cols.forEach((c,i)=>o[c]=a[i+1]);return o;});}
+function startDashboard(out,source){
+  KEYS=out.cols;DAYS=toDays(out);QUEUE=out.queue||{};SOURCE=source;
+  if(!DAYS.length){showStatus('err','The data has no rows with a readable date in the "Timestamp (BKK)" column.');return;}
+  $('dash').hidden=false;$('filterbar').hidden=false;
+  let r=null;try{r=JSON.parse(localStorage.getItem('radar-range')||'null');}catch(e){}
+  if(Array.isArray(r)&&r.length===2&&dayIdx(r[0])>=0&&dayIdx(r[1])>=0)setRange(r[0],r[1]);else applyPreset(String(CONFIG.DEFAULT_RANGE||'30'));
+  renderSource();
+}
+function renderSource(){
+  const at=SOURCE.at?new Date(SOURCE.at):null;
+  $('src-label').textContent=SOURCE.label;
+  $('src-meta').textContent=`${fmt(SOURCE.rows)} messages · ${fdate(DAYS[0].d)} to ${fdate(DAYS[DAYS.length-1].d)}${at?` · updated ${at.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}`;
+}
+function showStatus(kind,msg){const el=$('src-status');el.className='src-status '+(kind||'');el.textContent=msg||'';el.hidden=!msg;}
+function saveCache(out){try{localStorage.setItem(CACHE_KEY,JSON.stringify({at:Date.now(),url:CONFIG.DATA_URL,out}));}catch(e){}}
+function loadCache(){try{const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');if(c&&c.url===CONFIG.DATA_URL&&c.out&&c.out.rows&&c.out.rows.length)return c;}catch(e){}return null;}
+
+function runParse(input,label,isFile){
+  return new Promise((resolve,reject)=>{
+    const E=createEngine(RXS,RCS,{dateOrder:CONFIG.DATE_ORDER});let n=0,checked=false;
+    const t0=Date.now();
+    Papa.parse(input,{download:!isFile,header:true,skipEmptyLines:true,worker:true,
+      chunk:(res,parser)=>{
+        if(!checked){checked=true;const f=res.meta.fields||[];if(!f.some(x=>/question/i.test(x))||!f.some(x=>/timestamp/i.test(x))){try{parser.abort();}catch(e){}reject(new Error('The sheet needs "Timestamp (BKK)" and "Question" columns. Found: '+f.join(', ')));return;}}
+        res.data.forEach(r=>E.addRow(r));n+=res.data.length;showStatus('busy',`${label}: ${fmt(n)} messages read…`);
+      },
+      complete:()=>{const out=E.finish();resolve(out);},
+      error:err=>reject(new Error((err&&err.message)||'Could not download the data.'))});
+  });
+}
+async function refreshFromSheet(){
+  if(!CONFIG.DATA_URL){showStatus('err','No data link set. Add your published Google Sheet CSV link to CONFIG.DATA_URL in index.html.');return;}
+  $('btn-refresh').disabled=true;showStatus('busy','Connecting to the Google Sheet…');
+  try{
+    const out=await runParse(CONFIG.DATA_URL,'Loading from Google Sheet',false);
+    saveCache(out);startDashboard(out,{label:'Google Sheet (live)',at:Date.now(),rows:out.total});
+    showStatus('ok',`Loaded ${fmt(out.total)} messages from the Google Sheet.`);setTimeout(()=>showStatus('',''),4000);
+  }catch(e){
+    const cached=DAYS.length;
+    showStatus('err',`Could not load the Google Sheet: ${String(e.message).replace(/\.?\s*$/,'.')} ${cached?'Showing the last saved copy.':'Check that the sheet is published to the web as CSV, or load a file instead.'}`);
+  }finally{$('btn-refresh').disabled=false;}
+}
+// Load a CSV or XLSX export instead of (or on top of) the sheet
+$('up-file').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;e.target.value='';
+  try{
+    let out;
+    if(/\.xlsx?$/i.test(f.name)){
+      if(typeof XLSX==='undefined')throw new Error('The spreadsheet reader did not load. Check your connection and reload the page.');
+      showStatus('busy','Reading '+f.name+'…');
+      const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      const E=createEngine(RXS,RCS,{dateOrder:CONFIG.DATE_ORDER});rows.forEach(r=>E.addRow(r));out=E.finish();
+    }else{out=await runParse(f,'Reading '+f.name,true);}
+    if(!out.rows.length)throw new Error('No rows with a readable date in the "Timestamp (BKK)" column.');
+    const mode=document.querySelector('input[name="up-mode"]:checked').value;
+    if(mode==='add'&&DAYS.length){
+      const add=toDays(out);add.forEach(a=>{const i=dayIdx(a.d);if(i>=0)DAYS[i]=a;else DAYS.push(a);QUEUE[a.d]=out.queue[a.d]||[];});
+      DAYS.sort((a,b)=>a.d<b.d?-1:1);SOURCE.rows+=out.total;SOURCE.label=SOURCE.label.replace(/ \+ file$/,'')+' + file';SOURCE.at=Date.now();
+      setRange(DAYS[R0]?DAYS[R0].d:add[0].d,add[add.length-1].d);renderSource();
+    }else{startDashboard(out,{label:'File: '+f.name,at:Date.now(),rows:out.total});}
+    showStatus('ok',`Loaded ${fmt(out.total)} messages from ${f.name}. This is not saved; reloading the page goes back to the Google Sheet.`);
+  }catch(err){showStatus('err',err.message);}
+});
+$('btn-refresh').addEventListener('click',refreshFromSheet);
+(function boot(){
+  const c=loadCache();
+  if(c){startDashboard(c.out,{label:'Google Sheet (saved copy)',at:c.at,rows:c.out.total});}
+  refreshFromSheet();
+})();
+
+</script>
+</body>
+</html>
